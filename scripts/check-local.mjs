@@ -40,6 +40,17 @@ const verdictOk = board.every((r) => {
 });
 check('farm_verdicts', verdictOk, `${board.filter((r) => r.farm_verdict.verdict === 'Strong').length} Strong / ${board.filter((r) => r.farm_verdict.verdict === 'Worth a look').length} Worth a look / ${board.filter((r) => r.farm_verdict.verdict === 'Thin').length} Thin`);
 
+// Launch odds (v2): present on every row, a probability with peer counts behind it,
+// and the regression breakdown the page recomputes from.
+const oddsOk = board.every((r) => {
+  const o = r.launch_odds;
+  const g = r.regression;
+  return o && typeof o.odds === 'number' && o.odds >= 0 && o.odds <= 1
+    && Number.isSafeInteger(o.live_peers) && Number.isSafeInteger(o.total_peers) && o.live_peers <= o.total_peers
+    && g && typeof g.intercept === 'number' && typeof g.log_tvl === 'number' && typeof g.category_effect === 'number';
+});
+check('launch_odds', oddsOk, `odds 0-1 on all rows, peers counted, regression breakdown present`);
+
 const pngSize = (buf) => ({ w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) });
 const shots = readdirSync(join(out, 'screenshots')).filter((f) => f.endsWith('.png'));
 const shotsOk = shots.length >= 3 && shots.every((f) => {

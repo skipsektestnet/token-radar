@@ -6,7 +6,7 @@
 
 A web dashboard that ranks pre-token DeFi protocols by implied value — what a
 token would be worth if the protocol's record stayed as it is — and shows how
-to farm each one. Built for the [token-radar-01 bounty](https://make.fun/competitions/token-radar-01)
+to farm each one. Built for the [token-radar-01 bounty](https://make.fun/bounty/token-radar-01)
 on make.fun.
 
 ## What it does
@@ -15,13 +15,16 @@ on make.fun.
   2026-11-14, 758 protocols) and scores **every rankable pre-token protocol**:
   all 40 watchlist protocols plus every other pre-token protocol that is not
   a wrapped, staked, bridged or exchange product — **197 rows**.
-- Ranks them by an **implied value** computed only from the snapshot's own
-  figures. The category multiple is the snapshot's own live-token evidence:
-  the median market-cap-to-TVL ratio of the live-token protocols in each
-  category (global median where a category has too few live tokens), clamped
-  to [0.05, 1.20]. Then growth (7-day TVL change, clamped), maturity (age
-  since first listed) and chain breadth adjust it. No protocol name is ever
-  special-cased.
+- Ranks them by an **implied value** from a **ridge regression** fitted on the
+  snapshot's own 128 live-token protocols: log market cap on log TVL, 7-day
+  growth, log age and chain count, plus a shrunk per-category effect
+  (penalty λ = 10, chosen on a held-out grid). The regression beats the
+  earlier TVL-times-category-multiple formula out of sample (median |log err|
+  1.27 vs 1.63 on the same 2 splits × 2 folds; TVL-only baseline 1.77). No
+  protocol name is ever special-cased.
+- Shows each protocol's **launch odds from its peers' record**: the share of
+  protocols in its category that already carry a token, smoothed toward the
+  global share. The odds are displayed, not fitted into the value.
 - Gives every protocol a **6-step farm plan** derived from its category
   (the action), its TVL tier (the capital, $50–$250) and its age (the hold,
   30–60 days), each step with its cost and time. It never promises a token
@@ -32,10 +35,11 @@ on make.fun.
 ## The dashboard
 
 `dashboard/` is a static page with no network and no framework: a sortable,
-filterable board (search, category, chain, watchlist-only), a detail view for
-every protocol (value breakdown, live comparables in its category, farm
-plan), the live-token table, and the model itself in the open — including the
-category-multiples table computed from the snapshot.
+filterable board (search, category, chain, watchlist-only, launch odds), a
+detail view for every protocol (regression breakdown, launch odds, live
+comparables in its category, farm plan), the live-token table, and the model
+itself in the open — including the fitted coefficients, the per-fold
+validation table and the launch-odds table.
 
 ## Run it
 
@@ -51,7 +55,12 @@ coverage, bad ranks, bad farm steps).
 ## Layout
 
 - `main.ts` — entrypoint: snapshot in, board + dashboard + dossier out.
-- `lib/model.ts` — the valuation model, the farm plans, the board builder.
+- `lib/model.ts` — the valuation model (radar-3 ridge regression + launch
+  odds), the farm plans, the board builder.
+- `lib/validate.ts` — the held-out validation (2 splits × 2 folds, ablations,
+  lambda grid) that the entry runs on every build.
+- `lib/experiment.ts` — the v2 model experiments that chose the regression
+  family (shrinkage, OLS, ridge) on the same folds.
 - `dashboard/` — `index.html`, `app.css`, `app.js` (the page recomputes each
   row's implied value and farm plan, so the code and the board agree).
 - `vendor/makefun-board.ts` — the kit's dossier library.

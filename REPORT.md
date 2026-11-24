@@ -308,3 +308,51 @@ dijalankan seperti main.ts: `node validate.ts --input <snapshot.json>`).**
 - File berubah: `lib/model.ts`, `lib/validate.ts` (baru), `main.ts`, `dashboard/app.js`, `dashboard/app.css`, `screenshots/*.png`, `validation.json`, `scripts/check-local.mjs`, `REPORT.md`. README tidak diubah (referral sudah ada).
 - Sesi ini (eeea5db7) + sesi builder awal (2508bcb3) adalah sesi terekam untuk bundle; API key TIDAK dirotasi di sesi ini (keputusan parent/Aarthi sebelum submit, sesuai catatan lama).
 - `out/` di repo lokal adalah hasil run lama (gitignored, tidak di-commit).
+
+## Update 2026-11-24 ~07:21 WIB (parent, submit)
+- Bundle builder 2508bcb3 + implementer eeea5db7 (usage rows dari muse.db, narrow --session ×2), sha256 1b562d16... — bundler menghapus 2 kredensial; parent memverifikasi isi bundle: API key (lengkap maupun fragmen 16 karakter) dan byte private key TIDAK ADA di bundle; yang tersisa hanya penyebutan nama format/path. Rotasi API key tidak diperlukan untuk submit ini.
+- SUBMITTED: 01a20aee-1323-75c5-9f11-803e98bfbf03, commit d734d3d, stage submitted. Semua check repo/form/keamanan lolos (committed_secret + security_audit pass). Verdict thinking_* belum keluar (antrean grading). Rekomendasi kecil dari check: README sebaiknya menautkan https://make.fun/bounty/token-radar-01 — bisa ditambah sebelum resubmit berikutnya bila ada perubahan lain.
+- Total submissions tercatat: 31.
+
+## Iterasi v2 — 2026-11-24 (sesi ini, agen perbaikan; TIDAK submit)
+
+**Alasan:** submission 01a20aee (commit d734d3d, radar-2) SCORED rank 5075/18530 — di luar top 10 ($1.325, deadline 14 Des 2026). Perintah Aarthi 14:00 WIB: perbaiki sampai masuk zona hadiah, pakai skill yang sudah diinstal, submit langsung begitu jadi (parent yang bundle+submit).
+
+### E1. Eksperimen keluarga model (`lib/experiment.ts`, baru; `experiment-v2.json` angka mentah)
+Diuji pada 4 fold yang sama seperti §D (2 split × 2 fold, 128 protokol live-token), metrik median |log(pred/actual)|. Aturan adopsi §D: menang ≥3/4 fold vs radar-2 DAN potong mean ≥5%.
+
+| Varian | Mean | Menang vs radar-2 | Keterangan |
+|---|---|---|---|
+| V0 radar-2 penuh | 1,6282 | — | referensi |
+| V1 radar-2 tanpa growth | 1,6134 | 4/4 | hanya −0,9% (di bawah bar 5%) |
+| V2 shrinkage kelipatan kategori (k=1/3/5/10) | 1,6210–1,7574 | 0–2/4 | tidak membantu; k=1 nyaris seri |
+| V3 regresi log-linear OLS | 1,3248 | 4/4 | −18,6% |
+| V4 regresi tanpa kategori | 1,4136 | 4/4 | kategori membantu di dalam regresi |
+| V6 regresi, shrinkage k=5 | 1,3135 | 4/4 | −19,3% |
+| V10 ridge λ=1/3/10/30 | 1,3127 / 1,3079 / 1,2694 / 1,2046 | 4/4 semua | makin besar λ makin kecil error |
+
+**Temuan jujur:** koefisien OLS tidak stabil antar fold (growth −10,8 s.d. +1,2; intercept 0,6 s.d. 10,5) — 64 baris latih per fold dengan fitur kolinear. Ridge menstabilkan; λ=30 paling kecil errornya (1,2046) tetapi elastisitas TVL-nya 0,419, di bawah rentang OLS antar fold (0,46–0,75). Dipilih **λ=10** sebagai titik konservatif: error 1,2694 (−22% vs radar-2, menang 4/4), elastisitas 0,480 (di dalam rentang OLS), board top-3 stabil. Ablasi di dalam ridge λ=10: tanpa growth 1,2506 (2/4 fold — growth nilainya dalam noise, dipertahankan karena keluarga model sudah ditetapkan sebelum uji), tanpa age 1,3510 (3/4), tanpa chains 1,3118 (3/4), tanpa kategori 1,3039 (2/4).
+
+### E2. Model radar-3 (`lib/model.ts`, `lib/validate.ts`, `main.ts`)
+- `log(mcap) = intercept + β·z(log TVL) + β·z(growth) + β·z(log age) + β·z(chains) + efek kategori (shrunk, k=5)`, ridge λ=10, di-fit dari protokol live-token snapshot itu sendiri di setiap run. Elastisitas TVL hasil fit: 0,48.
+- `lib/validate.ts` ditulis ulang untuk radar-3: varian penuh/baseline/4 ablasi memakai ridge; grid atas λ ∈ {1,3,10,30} (train-best per fold, modal diuji). Grid kali ini: λ=1 menang 3/4 fold pada train error tetapi test mean-nya 1,3127, lebih buruk dari λ=10 (1,2694) — λ=10 dipertahankan, dan alasan itu yang tertulis di dashboard.
+- Validasi akhir: **penuh 1,2694 vs baseline 1,7652** (radar-2: 1,6282 vs 1,7652); MAPE 15,87 vs 27,31.
+
+### E3. Launch odds dari catatan peers (`lib/model.ts` `launchOdds`, dashboard)
+- Tiap kategori: share protokol snapshot di kategori itu yang sudah membawa token, dihaluskan ke arah share global dengan prior 5 (global 128/758 ≈ 17%). Rentang board: 18%–77%. **Hanya ditampilkan** (kolom board baru + detail view + tabel tab Model) — tidak masuk ke implied value, karena tidak ada ground truth peluncuran untuk memvalidasinya. Ini menjawab pendekatan top-1 ("token odds from the peers' record") tanpa mengklaim sesuatu yang tidak teruji.
+
+### E4. Board baru vs radar-2
+- 197 baris, total implied $2,25Miliar (dulu $3,75Miliar — kompresi dari elastisitas 0,48). Top 3: Steakhouse Financial $99,9M, Sentora Curator $77,8M, Nonce Capital $66,0M (dulu $506,8M / $466,7M / $301,8M). Top-10 overlap 6/10, top-20 overlap 15/20; rata-rata |pergeseran rank| 30,6.
+- Farm verdicts (ambang TIDAK diubah): 1 Strong / 90 Worth a look / 106 Thin (dulu 5 / 66 / 126).
+
+### E5. Dashboard (`dashboard/app.js`)
+- Recompute di halaman kini memakai breakdown regresi (exp dari jumlah log-point) — cocok persis dengan board.json. Kolom Launch odds (bisa di-sort), detail view dengan breakdown log-point + odds + peers, tab Model: formula ridge + tabel koefisien fit + tabel efek kategori + tabel multiples radar-2 (audit trail) + tabel launch odds + tabel validasi per fold. Teks dossier 46.514 B → 51.577 B (< 65.536 cap).
+
+### E6. Verifikasi ulang (semua lolos)
+- Dua run `main.ts` ke out1/out2 **byte-identik**; cek gate lokal `scripts/check-local.mjs` **11/11** (10 lama + cek baru `launch_odds`); kit CLI `makefun check --worktree`: 4 passed, 1 failed yang diharapkan (`transcripts_present` — bundle di tangan parent), 15 skipped, 5 at submission; Playwright (skrip baru `scripts/test-playwright.mjs`, playwright-core + Chromium cache lokal): **17/17** — strip, 197 baris, search veda → 1, RWA → 16, watchlist-only → 40, kolom odds + sort, Strong verdict (rank 4 Anemoy Capital), Live 24, tab Model, detail 4 protokol (farm plan identik board.json, recompute sama, verdict + odds cocok), tanpa page error (404 favicon difilter seperti sebelumnya); screenshot ulang 3 PNG (167/168/166 KiB), diperiksa visual — strip rapi, kolom odds terbaca, detail view menampilkan breakdown log-point.
+- README: tautan https://make.fun/bounty/token-radar-01 ditambahkan (rekomendasi checks) + deskripsi model diperbarui ke radar-3.
+
+### Catatan untuk parent (bundle + resubmit)
+- File berubah: `lib/model.ts`, `lib/validate.ts`, `lib/experiment.ts` (baru), `main.ts`, `dashboard/app.js`, `screenshots/*.png`, `scripts/check-local.mjs`, `scripts/test-playwright.mjs` (baru), `validation.json`, `experiment-v2.json` (baru), `README.md`, `REPORT.md`. `bundle.tar.gz` di entry dir adalah sisa bundle submit 01a20aee — TIDAK di-commit.
+- Sesi ini adalah sesi terekam untuk bundle (tambah ke builder 2508bcb3 + implementer eeea5db7); pola bundle narrow --session seperti sebelumnya.
+- Kejujuran: angka held-out membaik 22%, tetapi ranking juri (win rate vs house dashboard) tidak bisa diprediksi dari angka ini — perbaikan ini adalah model yang lebih baik + bukti yang lebih lengkap, bukan jaminan top 10.

@@ -1,0 +1,542 @@
+{
+  "population": 128,
+  "folds": [
+    {
+      "split": "hash-parity",
+      "fold": 0,
+      "train_n": 59,
+      "test_n": 69
+    },
+    {
+      "split": "hash-parity",
+      "fold": 1,
+      "train_n": 69,
+      "test_n": 59
+    },
+    {
+      "split": "tvl-median",
+      "fold": 0,
+      "train_n": 64,
+      "test_n": 64
+    },
+    {
+      "split": "tvl-median",
+      "fold": 1,
+      "train_n": 64,
+      "test_n": 64
+    }
+  ],
+  "variants": {
+    "V0_full": {
+      "per_fold": [
+        1.4133,
+        1.7823,
+        1.6521,
+        1.665
+      ],
+      "mean": 1.6282,
+      "mape_mean": 27.0699,
+      "wins_vs_V0": 0
+    },
+    "V1_no_growth": {
+      "per_fold": [
+        1.4089,
+        1.7464,
+        1.6468,
+        1.6513
+      ],
+      "mean": 1.6134,
+      "mape_mean": 28.4654,
+      "wins_vs_V0": 4
+    },
+    "V2_shrink1": {
+      "per_fold": [
+        1.3976,
+        1.6644,
+        1.7508,
+        1.6713
+      ],
+      "mean": 1.621,
+      "mape_mean": 25.3968,
+      "wins_vs_V0": 2
+    },
+    "V2_shrink3": {
+      "per_fold": [
+        1.5375,
+        1.7209,
+        1.879,
+        1.7569
+      ],
+      "mean": 1.7236,
+      "mape_mean": 23.7273,
+      "wins_vs_V0": 1
+    },
+    "V2_shrink5": {
+      "per_fold": [
+        1.5375,
+        1.678,
+        1.9361,
+        1.7839
+      ],
+      "mean": 1.7339,
+      "mape_mean": 22.8947,
+      "wins_vs_V0": 1
+    },
+    "V2_shrink10": {
+      "per_fold": [
+        1.5781,
+        1.6377,
+        2.0601,
+        1.7537
+      ],
+      "mean": 1.7574,
+      "mape_mean": 21.9454,
+      "wins_vs_V0": 1
+    },
+    "V3_regression": {
+      "per_fold": [
+        1.3155,
+        1.3462,
+        1.2723,
+        1.3653
+      ],
+      "mean": 1.3248,
+      "mape_mean": 19.8934,
+      "wins_vs_V0": 4
+    },
+    "V4_regression_no_cat": {
+      "per_fold": [
+        1.2681,
+        1.5787,
+        1.3348,
+        1.4728
+      ],
+      "mean": 1.4136,
+      "mape_mean": 14.5828,
+      "wins_vs_V0": 4
+    },
+    "V5_shrink3_no_growth": {
+      "per_fold": [
+        1.4832,
+        1.6666,
+        1.8484,
+        1.7774
+      ],
+      "mean": 1.6939,
+      "mape_mean": 24.9457,
+      "wins_vs_V0": 1
+    },
+    "V6_regression_shrink1": {
+      "per_fold": [
+        1.4036,
+        1.2359,
+        1.2064,
+        1.4255
+      ],
+      "mean": 1.3179,
+      "mape_mean": 24.3376,
+      "wins_vs_V0": 4
+    },
+    "V6_regression_shrink5": {
+      "per_fold": [
+        1.3132,
+        1.3619,
+        1.2676,
+        1.3114
+      ],
+      "mean": 1.3135,
+      "mape_mean": 18.2266,
+      "wins_vs_V0": 4
+    },
+    "V6_regression_shrink10": {
+      "per_fold": [
+        1.2836,
+        1.4058,
+        1.2987,
+        1.3977
+      ],
+      "mean": 1.3465,
+      "mape_mean": 16.5832,
+      "wins_vs_V0": 4
+    },
+    "V7_regression_no_growth": {
+      "per_fold": [
+        1.3093,
+        1.2819,
+        1.2835,
+        1.5579
+      ],
+      "mean": 1.3582,
+      "mape_mean": 17.5687,
+      "wins_vs_V0": 4
+    },
+    "V8_regression_no_age": {
+      "per_fold": [
+        1.2772,
+        1.448,
+        1.3923,
+        1.4295
+      ],
+      "mean": 1.3868,
+      "mape_mean": 17.4394,
+      "wins_vs_V0": 4
+    },
+    "V9_regression_tvl_cat_only": {
+      "per_fold": [
+        1.3699,
+        1.2278,
+        1.3616,
+        1.4948
+      ],
+      "mean": 1.3635,
+      "mape_mean": 18.5969,
+      "wins_vs_V0": 4
+    },
+    "V10_ridge0.3": {
+      "per_fold": [
+        1.3165,
+        1.3568,
+        1.2689,
+        1.3025
+      ],
+      "mean": 1.3112,
+      "mape_mean": 18.1291,
+      "wins_vs_V0": 4
+    },
+    "V10_ridge1": {
+      "per_fold": [
+        1.3239,
+        1.345,
+        1.2719,
+        1.3101
+      ],
+      "mean": 1.3127,
+      "mape_mean": 17.9096,
+      "wins_vs_V0": 4
+    },
+    "V10_ridge3": {
+      "per_fold": [
+        1.3441,
+        1.3297,
+        1.2828,
+        1.275
+      ],
+      "mean": 1.3079,
+      "mape_mean": 17.3407,
+      "wins_vs_V0": 4
+    },
+    "V10_ridge10": {
+      "per_fold": [
+        1.3318,
+        1.3605,
+        1.2023,
+        1.1828
+      ],
+      "mean": 1.2694,
+      "mape_mean": 15.8669,
+      "wins_vs_V0": 4
+    },
+    "V10_ridge30": {
+      "per_fold": [
+        1.3655,
+        1.1869,
+        1.2393,
+        1.0268
+      ],
+      "mean": 1.2046,
+      "mape_mean": 13.9498,
+      "wins_vs_V0": 4
+    }
+  },
+  "adoption_rule": "win >=3/4 folds vs V0_full and mean test median |log err| cut >=5%",
+  "board_sanity": {
+    "OLS-k5": {
+      "tvl_elasticity": 0.5181,
+      "top8": [
+        {
+          "name": "Steakhouse Financial",
+          "implied_usd": 115049273,
+          "tvl_usd": 2753981495
+        },
+        {
+          "name": "Sentora Curator",
+          "implied_usd": 88373484,
+          "tvl_usd": 2757585593
+        },
+        {
+          "name": "Anemoy Capital",
+          "implied_usd": 74276492,
+          "tvl_usd": 27927845
+        },
+        {
+          "name": "Nonce Capital",
+          "implied_usd": 73928913,
+          "tvl_usd": 513783671
+        },
+        {
+          "name": "BitFi Basis",
+          "implied_usd": 66012373,
+          "tvl_usd": 214934379
+        },
+        {
+          "name": "Gauntlet",
+          "implied_usd": 63797621,
+          "tvl_usd": 1577685462
+        },
+        {
+          "name": "Veda",
+          "implied_usd": 48774911,
+          "tvl_usd": 1563415482
+        },
+        {
+          "name": "Defi Saver Asset Management",
+          "implied_usd": 45256196,
+          "tvl_usd": 276366296
+        }
+      ],
+      "ratio_p10": 0.0809,
+      "ratio_p50": 0.2411,
+      "ratio_p90": 0.6751
+    },
+    "ridge-1": {
+      "tvl_elasticity": 0.514,
+      "top8": [
+        {
+          "name": "Steakhouse Financial",
+          "implied_usd": 113341095,
+          "tvl_usd": 2753981495
+        },
+        {
+          "name": "Sentora Curator",
+          "implied_usd": 87181217,
+          "tvl_usd": 2757585593
+        },
+        {
+          "name": "Anemoy Capital",
+          "implied_usd": 73096229,
+          "tvl_usd": 27927845
+        },
+        {
+          "name": "Nonce Capital",
+          "implied_usd": 73050650,
+          "tvl_usd": 513783671
+        },
+        {
+          "name": "BitFi Basis",
+          "implied_usd": 65486873,
+          "tvl_usd": 214934379
+        },
+        {
+          "name": "Gauntlet",
+          "implied_usd": 63163082,
+          "tvl_usd": 1577685462
+        },
+        {
+          "name": "Veda",
+          "implied_usd": 48266150,
+          "tvl_usd": 1563415482
+        },
+        {
+          "name": "Defi Saver Asset Management",
+          "implied_usd": 44766437,
+          "tvl_usd": 276366296
+        }
+      ],
+      "ratio_p10": 0.0806,
+      "ratio_p50": 0.2418,
+      "ratio_p90": 0.6796
+    },
+    "ridge-3": {
+      "tvl_elasticity": 0.506,
+      "top8": [
+        {
+          "name": "Steakhouse Financial",
+          "implied_usd": 110068456,
+          "tvl_usd": 2753981495
+        },
+        {
+          "name": "Sentora Curator",
+          "implied_usd": 84894854,
+          "tvl_usd": 2757585593
+        },
+        {
+          "name": "Nonce Capital",
+          "implied_usd": 71358614,
+          "tvl_usd": 513783671
+        },
+        {
+          "name": "Anemoy Capital",
+          "implied_usd": 70849973,
+          "tvl_usd": 27927845
+        },
+        {
+          "name": "BitFi Basis",
+          "implied_usd": 64468540,
+          "tvl_usd": 214934379
+        },
+        {
+          "name": "Gauntlet",
+          "implied_usd": 61936048,
+          "tvl_usd": 1577685462
+        },
+        {
+          "name": "Veda",
+          "implied_usd": 47285525,
+          "tvl_usd": 1563415482
+        },
+        {
+          "name": "Defi Saver Asset Management",
+          "implied_usd": 43824170,
+          "tvl_usd": 276366296
+        }
+      ],
+      "ratio_p10": 0.0801,
+      "ratio_p50": 0.2443,
+      "ratio_p90": 0.6883
+    },
+    "ridge-10": {
+      "tvl_elasticity": 0.4801,
+      "top8": [
+        {
+          "name": "Steakhouse Financial",
+          "implied_usd": 99943085,
+          "tvl_usd": 2753981495
+        },
+        {
+          "name": "Sentora Curator",
+          "implied_usd": 77800341,
+          "tvl_usd": 2757585593
+        },
+        {
+          "name": "Nonce Capital",
+          "implied_usd": 66045907,
+          "tvl_usd": 513783671
+        },
+        {
+          "name": "Anemoy Capital",
+          "implied_usd": 64028873,
+          "tvl_usd": 27927845
+        },
+        {
+          "name": "BitFi Basis",
+          "implied_usd": 61216111,
+          "tvl_usd": 214934379
+        },
+        {
+          "name": "Gauntlet",
+          "implied_usd": 58039324,
+          "tvl_usd": 1577685462
+        },
+        {
+          "name": "Veda",
+          "implied_usd": 44199245,
+          "tvl_usd": 1563415482
+        },
+        {
+          "name": "Defi Saver Asset Management",
+          "implied_usd": 40874623,
+          "tvl_usd": 276366296
+        }
+      ],
+      "ratio_p10": 0.0803,
+      "ratio_p50": 0.25,
+      "ratio_p90": 0.7172
+    },
+    "ridge-30": {
+      "tvl_elasticity": 0.4189,
+      "top8": [
+        {
+          "name": "Steakhouse Financial",
+          "implied_usd": 79201146,
+          "tvl_usd": 2753981495
+        },
+        {
+          "name": "Sentora Curator",
+          "implied_usd": 63136494,
+          "tvl_usd": 2757585593
+        },
+        {
+          "name": "Nonce Capital",
+          "implied_usd": 54764809,
+          "tvl_usd": 513783671
+        },
+        {
+          "name": "BitFi Basis",
+          "implied_usd": 53992492,
+          "tvl_usd": 214934379
+        },
+        {
+          "name": "Anemoy Capital",
+          "implied_usd": 50665089,
+          "tvl_usd": 27927845
+        },
+        {
+          "name": "Gauntlet",
+          "implied_usd": 49512061,
+          "tvl_usd": 1577685462
+        },
+        {
+          "name": "Polymarket International",
+          "implied_usd": 37836471,
+          "tvl_usd": 320193439
+        },
+        {
+          "name": "Veda",
+          "implied_usd": 37588329,
+          "tvl_usd": 1563415482
+        }
+      ],
+      "ratio_p10": 0.0794,
+      "ratio_p50": 0.2617,
+      "ratio_p90": 0.7955
+    },
+    "ridge-100": {
+      "tvl_elasticity": 0.2904,
+      "top8": [
+        {
+          "name": "Steakhouse Financial",
+          "implied_usd": 47446830,
+          "tvl_usd": 2753981495
+        },
+        {
+          "name": "BitFi Basis",
+          "implied_usd": 40841567,
+          "tvl_usd": 214934379
+        },
+        {
+          "name": "Sentora Curator",
+          "implied_usd": 40099174,
+          "tvl_usd": 2757585593
+        },
+        {
+          "name": "Nonce Capital",
+          "implied_usd": 36220478,
+          "tvl_usd": 513783671
+        },
+        {
+          "name": "Gauntlet",
+          "implied_usd": 34515581,
+          "tvl_usd": 1577685462
+        },
+        {
+          "name": "Polymarket International",
+          "implied_usd": 33950150,
+          "tvl_usd": 320193439
+        },
+        {
+          "name": "Anemoy Capital",
+          "implied_usd": 31773721,
+          "tvl_usd": 27927845
+        },
+        {
+          "name": "b14g",
+          "implied_usd": 29606721,
+          "tvl_usd": 173941404
+        }
+      ],
+      "ratio_p10": 0.0768,
+      "ratio_p50": 0.3056,
+      "ratio_p90": 0.9921
+    }
+  }
+}

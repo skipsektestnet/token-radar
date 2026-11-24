@@ -84,7 +84,12 @@ export const MODEL: ModelConstants = {
 };
 
 /** The model's version label: the dashboard names it. */
-export const MODEL_VERSION = 'radar-2';
+export const MODEL_VERSION = 'radar-3';
+
+/** The ridge penalty the held-out grid settled on (v2 experiments). */
+export const REGRESSION_LAMBDA = 10;
+/** The shrinkage weight on the per-category residual effect (v2 experiments). */
+export const REGRESSION_SHRINK_K = 5;
 
 /** How many live-token protocols the Live token view carries, by market cap. */
 export const LIVE_ROWS = 24;
@@ -121,6 +126,10 @@ export interface BoardRow {
     breadth_multiplier: number;
     age_days: number | null;
   };
+  /** Radar-3: the fitted log-linear model's breakdown, in log points. */
+  regression: RegressionBreakdown;
+  /** Radar-3: the protocol's launch odds from its category peers' record. */
+  launch_odds: LaunchOdds;
   farm_steps: string[];
   farm_verdict: FarmVerdict;
 }
@@ -143,6 +152,10 @@ export interface RadarRow {
   maturity_multiplier: number;
   breadth_multiplier: number;
   is_watchlist: boolean;
+  /** Radar-3: the fitted log-linear model's breakdown, in log points. */
+  regression: RegressionBreakdown;
+  /** Radar-3: the protocol's launch odds from its category peers' record. */
+  launch_odds: LaunchOdds;
   farm_verdict: FarmVerdict;
 }
 
@@ -170,6 +183,44 @@ export interface FarmVerdict {
   total_cost_usd: number;
   value_per_dollar: number;
   verdict: 'Strong' | 'Worth a look' | 'Thin';
+}
+
+/**
+ * The fitted log-linear valuation model (radar-3): log(mcap) is a ridge
+ * regression on standardized features, plus a shrunk per-category residual
+ * effect. The regression is fitted on the snapshot's own live-token
+ * protocols; nothing is hard-coded. Features, in order: log TVL, clamped
+ * 7-day growth, log(age in days + 1), capped chain count. `beta` holds the
+ * standardized coefficients; `means`/`stds` are the training-side feature
+ * scales that un-standardize them.
+ */
+export interface RegressionFit {
+  lambda: number;
+  shrink_k: number;
+  intercept: number;
+  beta: number[];
+  means: number[];
+  stds: number[];
+  cat_effects: Record<string, number>;
+  /** Which of [log TVL, growth, log age, chains] the fit uses; dropped terms contribute 0. */
+  mask: [boolean, boolean, boolean, boolean];
+}
+
+/** One protocol's regression breakdown, in log points, for the detail view. */
+export interface RegressionBreakdown {
+  intercept: number;
+  log_tvl: number;
+  growth: number;
+  log_age: number;
+  chains: number;
+  category_effect: number;
+}
+
+/** A protocol's launch odds from its peers' record, for the board. */
+export interface LaunchOdds {
+  odds: number;
+  live_peers: number;
+  total_peers: number;
 }
 
 /** Why a pre-token protocol is left off the board, counted once under the first reason that excludes it. */
@@ -200,13 +251,10 @@ export interface ValidationFold {
   no_category: ValidationVariantMetrics;
 }
 
-/** The five constants the grid fit may move. */
+/** The two constants the v2 grid fit may move (ridge penalty, category shrinkage). */
 export interface FittedConstants {
-  growth_weight: number;
-  maturity_floor: number;
-  breadth_per_chain: number;
-  multiple_floor: number;
-  multiple_cap: number;
+  lambda: number;
+  shrink_k: number;
 }
 
 /** The full held-out result: four folds, the ablations, and the grid fit's decision. */
@@ -265,6 +313,10 @@ export interface RadarData {
   total_implied_usd: number;
   multiples: CategoryMultiples;
   validation?: ModelValidation;
+  /** Radar-3: the fitted regression the board was scored with. */
+  regression_fit?: RegressionFit;
+  /** Radar-3: the launch odds from the peers' record, per category. */
+  launch_odds?: { by_category: Record<string, LaunchOdds>; global: LaunchOdds };
   rows: RadarRow[];
   live: LiveRow[];
 }
@@ -405,8 +457,158 @@ export function impliedValue(
   return { implied, categoryMultiple, growthPct, growthMult, maturityMult, breadthMult, age };
 }
 
-/** The protocols the board ranks, strongest first, with ranks 1..n. */
-export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): BoardRow[] {
+/** Solve a small dense linear system by Gaussian elimination with partial pivoting. */
+function solveLinear(A: number[][], b: number[]): number[] {
+  const n = b.length;
+  const M = A.map((row, i) => [...row, b[i]!]);
+  for (let col = 0; col < n; col++) {
+    let piv = col;
+    for (let r = col + 1; r < n; r++) if (Math.abs(M[r]![col]!) > Math.abs(M[piv]![col]!)) piv = r;
+    [M[col], M[piv]] = [M[piv]!, M[col]!];
+    const d = M[col]![col]!;
+    if (Math.abs(d) < 1e-12) continue;
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const f = M[r]![col]! / d;
+      for (let c = col; c <= n; c++) M[r]![c]! -= f * M[col]![c]!;
+    }
+  }
+  return M.map((row, i) => row[n]! / (Math.abs(row[i]!) < 1e-12 ? 1 : row[i]!));
+}
+
+/** The regression's four features, in the order the fit's beta follows them. A dropped feature reads 0. */
+export function regressionFeatures(p: SnapshotProtocol, asOf: string, mask: [boolean, boolean, boolean, boolean] = [true, true, true, true]): number[] {
+  const age = ageDays(asOf, p.listed_at) ?? MODEL.unknown_age_days;
+  const growth = Math.min(MODEL.growth_cap, Math.max(MODEL.growth_floor, p.change_7d ?? 0)) / 100;
+  const raw = [
+    Math.log(p.tvl_usd),
+    growth,
+    Math.log(age + 1),
+    Math.min(Math.max(p.chains.length - 1, 0), MODEL.breadth_max_chains),
+  ];
+  return raw.map((v, j) => (mask[j]! ? v : 0));
+}
+
+/**
+ * Fit the radar-3 log-linear model on the training side: ridge regression
+ * of log(mcap) on the four standardized features, then a shrunk
+ * per-category mean residual. The ridge penalty keeps the coefficients
+ * stable across folds where plain least squares swings (v2 experiments:
+ * the OLS growth coefficient ran from -10.8 to +1.2 across the four
+ * folds); the shrinkage keeps small categories from shouting.
+ */
+export function fitRidgeRegression(
+  train: SnapshotProtocol[],
+  asOf: string,
+  lambda: number = REGRESSION_LAMBDA,
+  shrinkK: number = REGRESSION_SHRINK_K,
+  mask: [boolean, boolean, boolean, boolean] = [true, true, true, true],
+  withCategory: boolean = true,
+): RegressionFit {
+  const X = train.map((p) => regressionFeatures(p, asOf, mask));
+  const y = train.map((p) => Math.log(p.mcap_usd!));
+  const d = X[0]!.length;
+  const means = X[0]!.map((_, j) => X.reduce((s, row) => s + row[j]!, 0) / X.length);
+  const stds = X[0]!.map((_, j) => {
+    const m = means[j]!;
+    const v = X.reduce((s, row) => s + (row[j]! - m) ** 2, 0) / X.length;
+    return Math.sqrt(v) || 1;
+  });
+  const yMean = y.reduce((a, b) => a + b, 0) / y.length;
+  const Z = X.map((row) => row.map((v, j) => (v - means[j]!) / stds[j]!));
+  const yc = y.map((v) => v - yMean);
+  const ZtZ: number[][] = Array.from({ length: d }, () => new Array<number>(d).fill(0));
+  const Zty: number[] = new Array<number>(d).fill(0);
+  for (let i = 0; i < Z.length; i++) {
+    for (let a = 0; a < d; a++) {
+      Zty[a]! += Z[i]![a]! * yc[i]!;
+      for (let b = 0; b < d; b++) ZtZ[a]![b]! += Z[i]![a]! * Z[i]![b]!;
+    }
+  }
+  for (let a = 0; a < d; a++) ZtZ[a]![a]! += lambda;
+  const beta = solveLinear(ZtZ, Zty);
+  const catEffects: Record<string, number> = {};
+  if (withCategory) {
+    const residByCat = new Map<string, number[]>();
+    for (let i = 0; i < train.length; i++) {
+      const pred = yMean + Z[i]!.reduce((s, v, j) => s + v * beta[j]!, 0);
+      const key = train[i]!.category ?? 'Other';
+      const list = residByCat.get(key) ?? [];
+      list.push(y[i]! - pred);
+      residByCat.set(key, list);
+    }
+    for (const [cat, resids] of residByCat) {
+      const n = resids.length;
+      catEffects[cat] = (n * (resids.reduce((a, b) => a + b, 0) / n)) / (n + shrinkK);
+    }
+  }
+  return { lambda, shrink_k: shrinkK, intercept: yMean, beta, means, stds, cat_effects: catEffects, mask };
+}
+
+/** One protocol's regression breakdown, in log points: the parts sum (plus the intercept) to log(implied). */
+export function regressionBreakdown(fit: RegressionFit, p: SnapshotProtocol, asOf: string): RegressionBreakdown {
+  const x = regressionFeatures(p, asOf, fit.mask);
+  const z = x.map((v, j) => (v - fit.means[j]!) / fit.stds[j]!);
+  const c = (j: number): number => Math.round(z[j]! * fit.beta[j]! * 1e4) / 1e4;
+  return {
+    intercept: Math.round(fit.intercept * 1e4) / 1e4,
+    log_tvl: c(0),
+    growth: c(1),
+    log_age: c(2),
+    chains: c(3),
+    category_effect: Math.round((fit.cat_effects[p.category ?? 'Other'] ?? 0) * 1e4) / 1e4,
+  };
+}
+
+/** The implied value the fitted radar-3 model gives one protocol. */
+export function predictRegressionValue(fit: RegressionFit, p: SnapshotProtocol, asOf: string): number {
+  const b = regressionBreakdown(fit, p, asOf);
+  const logValue = b.intercept + b.log_tvl + b.growth + b.log_age + b.chains + b.category_effect;
+  return Math.max(1, Math.round(Math.exp(logValue)));
+}
+
+/**
+ * Each category's launch odds from its peers' record: the share of the
+ * snapshot's protocols in that category that already carry a token,
+ * smoothed toward the global share with a prior weight of 5 protocols so
+ * a category with one or two peers does not read 0% or 100%. Displayed
+ * on the board; it does not enter the implied value, which stays the
+ * fitted value of a launch at peer multiples.
+ */
+export function launchOdds(snapshot: Snapshot): { by_category: Record<string, LaunchOdds>; global: LaunchOdds } {
+  const PRIOR = 5;
+  const counts = new Map<string, { live: number; total: number }>();
+  let liveTotal = 0;
+  for (const p of snapshot.protocols) {
+    const key = p.category ?? 'Other';
+    const c = counts.get(key) ?? { live: 0, total: 0 };
+    c.total++;
+    if (!isPreToken(p)) {
+      c.live++;
+      liveTotal++;
+    }
+    counts.set(key, c);
+  }
+  const globalRate = snapshot.protocols.length > 0 ? liveTotal / snapshot.protocols.length : 0;
+  const smooth = (live: number, total: number): number =>
+    Math.round(((live + PRIOR * globalRate) / (total + PRIOR)) * 1e4) / 1e4;
+  const byCategory: Record<string, LaunchOdds> = {};
+  for (const [cat, c] of [...counts.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+    byCategory[cat] = { odds: smooth(c.live, c.total), live_peers: c.live, total_peers: c.total };
+  }
+  return { by_category: byCategory, global: { odds: Math.round(globalRate * 1e4) / 1e4, live_peers: liveTotal, total_peers: snapshot.protocols.length } };
+}
+
+/** The protocols the board ranks, strongest first, with ranks 1..n.
+ * Radar-3 scores each row with the fitted log-linear model; the radar-2
+ * multiplicative value is kept alongside as the audit trail (the
+ * `model` breakdown), so the dashboard can show both. */
+export function buildBoard(
+  snapshot: Snapshot,
+  model: ModelConstants = MODEL,
+  fit: RegressionFit | null = null,
+  odds: { by_category: Record<string, LaunchOdds>; global: LaunchOdds } | null = null,
+): BoardRow[] {
   const multiples = categoryMultiples(snapshot, model);
   const watchlist = new Set(snapshot.watchlist);
   const index = new Map(snapshot.protocols.map((p) => [p.slug, p]));
@@ -420,7 +622,13 @@ export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): B
   for (const p of snapshot.protocols) {
     if (!chosen.has(p.slug) && isRankable(p)) chosen.set(p.slug, p);
   }
-  const scored = [...chosen.values()].map((p) => ({ p, ...impliedValue(p, snapshot.as_of, multiples, model) }));
+  const scored = [...chosen.values()].map((p) => {
+    const v2 = impliedValue(p, snapshot.as_of, multiples, model);
+    const breakdown = fit !== null ? regressionBreakdown(fit, p, snapshot.as_of) : null;
+    const implied = fit !== null ? predictRegressionValue(fit, p, snapshot.as_of) : v2.implied;
+    const launch = odds !== null ? (odds.by_category[p.category ?? 'Other'] ?? odds.global) : { odds: 0, live_peers: 0, total_peers: 0 };
+    return { p, v2, breakdown, implied, launch };
+  });
   scored.sort((a, b) => b.implied - a.implied || (a.p.slug < b.p.slug ? -1 : a.p.slug > b.p.slug ? 1 : 0));
   return scored.map((s, i) => ({
     rank: i + 1,
@@ -436,18 +644,20 @@ export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): B
     symbol: s.p.symbol,
     token_status: 'pre-token',
     is_watchlist: watchlist.has(s.p.slug),
-    age_days: s.age,
+    age_days: s.v2.age,
     implied_value_usd: s.implied,
     model: {
-      category_multiple: round4(s.categoryMultiple),
-      growth_pct: s.growthPct,
-      growth_multiplier: round4(s.growthMult),
-      maturity_multiplier: round4(s.maturityMult),
-      breadth_multiplier: round4(s.breadthMult),
-      age_days: s.age,
+      category_multiple: round4(s.v2.categoryMultiple),
+      growth_pct: s.v2.growthPct,
+      growth_multiplier: round4(s.v2.growthMult),
+      maturity_multiplier: round4(s.v2.maturityMult),
+      breadth_multiplier: round4(s.v2.breadthMult),
+      age_days: s.v2.age,
     },
-    farm_steps: farmSteps(s.p, s.age).map(stepText),
-    farm_verdict: farmVerdict(s.p, s.age, s.implied),
+    regression: s.breakdown ?? { intercept: 0, log_tvl: 0, growth: 0, log_age: 0, chains: 0, category_effect: 0 },
+    launch_odds: s.launch,
+    farm_steps: farmSteps(s.p, s.v2.age).map(stepText),
+    farm_verdict: farmVerdict(s.p, s.v2.age, s.implied),
   }));
 }
 
@@ -601,6 +811,8 @@ export function radarRow(row: BoardRow): RadarRow {
     maturity_multiplier: row.model.maturity_multiplier,
     breadth_multiplier: row.model.breadth_multiplier,
     is_watchlist: row.is_watchlist,
+    regression: row.regression,
+    launch_odds: row.launch_odds,
     farm_verdict: row.farm_verdict,
   };
 }
@@ -618,14 +830,24 @@ export function exclusionCounts(snapshot: Snapshot): ExclusionCounts {
   return counts;
 }
 
-/** Everything the dashboard renders, from the snapshot. */
+/** Everything the dashboard renders, from the snapshot.
+ * Fits the radar-3 regression on the snapshot's live-token protocols
+ * (the same population the validation scores) and computes the launch
+ * odds from the peers' record. `lambda` is the ridge penalty the
+ * validation grid settled on; the default is the v2 choice. */
 export function buildRadar(
   snapshot: Snapshot,
   model: ModelConstants = MODEL,
   validation?: ModelValidation,
   version: string = MODEL_VERSION,
+  lambda: number = REGRESSION_LAMBDA,
 ): { board: BoardRow[]; radar: RadarData } {
-  const board = buildBoard(snapshot, model);
+  const livePop = snapshot.protocols.filter(
+    (p) => !isPreToken(p) && p.mcap_usd !== null && p.tvl_usd > 0 && Number.isFinite(p.mcap_usd / p.tvl_usd) && p.mcap_usd / p.tvl_usd > 0,
+  );
+  const fit = fitRidgeRegression(livePop, snapshot.as_of, lambda, REGRESSION_SHRINK_K);
+  const odds = launchOdds(snapshot);
+  const board = buildBoard(snapshot, model, fit, odds);
   const live = liveRows(snapshot);
   const multiples = categoryMultiples(snapshot, model);
   const early = board.filter((r) => !r.is_watchlist).length;
@@ -642,6 +864,8 @@ export function buildRadar(
     total_implied_usd: board.reduce((sum, r) => sum + r.implied_value_usd, 0),
     multiples,
     validation,
+    regression_fit: fit,
+    launch_odds: odds,
     rows: board.map(radarRow),
     live,
   };
