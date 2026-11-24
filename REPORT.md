@@ -278,7 +278,7 @@ dijalankan seperti main.ts: `node validate.ts --input <snapshot.json>`).**
 - Sisa sebelum submit: implementasi §D (D1 held-out 2×, D2 integrity strip, D3 costed farm verdicts, D4 verifikasi ulang) + keputusan rotasi API key (builder session 2508bcb3 memuat marker kredensial; bundle menyaring kredensial, rotasi tetap disarankan sebelum submit).
 
 ## Implementasi §D 2026-11-24 (sesi eeea5db7-ef82-473e-ba51-46ab3600cef8 — agen implementasi, TIDAK submit)
-- Commit final: `88e173765b70cf24f907f4d7f41c1bfc684a0496` (branch `main`, push terverifikasi ke https://github.com/skipsektestnet/token-radar).
+- Commit final: `0ad849297ed6b91252d492827ec212a62dfee90a` (branch `main`, push terverifikasi ke https://github.com/skipsektestnet/token-radar).
 - Model tetap **radar-2** — konstanta TIDAK berubah (keputusan fit, lihat D1).
 
 ### D1. Held-out 2× (`lib/validate.ts`, baru; `validation.json` angka mentah di-commit)
