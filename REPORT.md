@@ -271,3 +271,40 @@ dijalankan seperti main.ts: `node validate.ts --input <snapshot.json>`).**
 4. Jangan submit ulang tanpa perubahan berarti (kuota 5/hari, 10 total;
    submission terakhir sebelum deadline adalah final).
 5. Pantau `node cli/makefun.mjs status` setelah submit.
+
+## Update 2026-11-24 ~07:10 WIB (parent, langsung)
+- Kit token-radar-01 diunduh dari `GET /c/token-radar-01/kit` (tar.gz 8,5 MB, sha bundle ea1c9dcc...) dan di-unpack ke `~/workspace/makefun/kits/token-radar-01/token-radar-01-kit/` — berisi `input/snapshot.json` (snapshot yang dipakai run awal).
+- Repo GitHub dibuat + push: https://github.com/skipsektestnet/token-radar @ `ea67b50` (commit baru: README referral + REPORT finisher). About terpasang (homepage kompetisi, topics makefun/ai-agents/bounties). `.makefun/owner.json` terverifikasi di remote. README sudah memuat referral jeq52989.
+- Sisa sebelum submit: implementasi §D (D1 held-out 2×, D2 integrity strip, D3 costed farm verdicts, D4 verifikasi ulang) + keputusan rotasi API key (builder session 2508bcb3 memuat marker kredensial; bundle menyaring kredensial, rotasi tetap disarankan sebelum submit).
+
+## Implementasi §D 2026-11-24 (sesi eeea5db7-ef82-473e-ba51-46ab3600cef8 — agen implementasi, TIDAK submit)
+- Commit final: `88e173765b70cf24f907f4d7f41c1bfc684a0496` (branch `main`, push terverifikasi ke https://github.com/skipsektestnet/token-radar).
+- Model tetap **radar-2** — konstanta TIDAK berubah (keputusan fit, lihat D1).
+
+### D1. Held-out 2× (`lib/validate.ts`, baru; `validation.json` angka mentah di-commit)
+- Populasi uji: 128 protokol live-token (mcap > 0, TVL > 0). Split A = paritas hash djb2 slug; split B = di atas/di bawah median TVL. 2 split × 2 fold = 4× fit + uji; kelipatan kategori selalu di-fit dari sisi latih saja.
+- Rata-rata 4 fold, median |log(pred/actual)|: **model penuh 1,6282** vs baseline (TVL × median global saja) **1,7652**; MAPE 27,07 vs 27,31. Model penuh menang rata-rata, tapi tidak di semua fold (hash-parity fold 1: baseline 1,631 < penuh 1,782) — angka ini yang ditampilkan dashboard, bukan klaim yang dipoles.
+- Ablasi (rata-rata median |log err|; "membantu" = model penuh lebih baik di fold itu): tanpa kategori 1,8195 (membantu 3/4 fold) · tanpa maturitas 1,5931 (2/4) · tanpa breadth 1,6272 (1/4) · tanpa growth 1,6134 (0/4 — menghapus growth justru sedikit memperbaiki semua fold, tapi selisihnya kecil, 0,005–0,036 per fold).
+- Grid fit (growth_weight 0–1, maturity_floor 0,5–0,7, breadth 0–0,03, clamp 2 pilihan = 90 kombinasi): tuple terbaik BERBEDA di tiap fold (menang 1/4 tiap-tiap) — fit tidak stabil, jadi **konstanta dipertahankan** sesuai aturan §D (perlu menang ≥3/4 fold + potong error uji ≥5%). Tidak ada adopsi, tidak ada radar-3.
+- `main.ts` menjalankan validasi ini di setiap run dan menyematkan ringkasannya ke `RadarData.validation`; bila fit suatu hari memenuhi aturan adopsi, model naik ke radar-3 otomatis.
+
+### D2. Integrity strip + tabel validasi (dashboard)
+- Strip di bawah header: snapshot 2026-11-14 · 758 protokol · 128 live-token dipakai fit · 145 pre-token di-exclude (129 by category, 11 versioned, 5 wrapped/staked, 0 exchange) · ringkasan held-out + per-term "membantu di n/4 fold".
+- Tab Model: tabel validasi per fold (split, fold, train/test, penuh, baseline, 4 ablasi) + catatan ambang farm verdict.
+- Biaya teks: dashboard 40.565 B → 46.248 B (+5.683 B, di bawah batas +10 KB); teks dossier 46.514 B < cap 65.536 B.
+
+### D3. Costed farm verdicts
+- `farm_verdict` di tiap `BoardRow`/`RadarRow`: total_cost_usd = modal (capitalFor) + setup gas ($4, atau $8 bila modal ≥ $150) + $2/minggu × ceil(hold/7); value_per_dollar = implied/total_cost (dibulatkan); verdict Strong (ratio ≥ 1.000.000 dan implied ≥ $10M) / Worth a look (≥ 100.000) / Thin.
+- Distribusi board: **5 Strong, 66 Worth a look, 126 Thin**. farm_steps TIDAK diubah (tetap lolos gate). Verdict tampil sebagai kolom baru di tabel board (verdict + biaya) dan di detail view bagian Farm plan; ambang tertulis di tab Model.
+
+### D4. Verifikasi ulang (semua lolos)
+- Dua run `main.ts` ke out1/out2 **byte-identik** (deterministik); top 3 dan total implied tidak berubah ($506,8M / $466,7M / $301,8M; total $3,75Miliar).
+- Cek gate lokal baru `scripts/check-local.mjs`: 10/10 lolos di kedua output (7 cek gate lama + farm_verdicts + validation_in_data + board_issue). Satu temuan saat penulisan cek: regex slug awal terlalu ketat (menolak `vfat.io`); diperbaiki ke pola yang mengizinkan titik.
+- Kit CLI resmi `makefun check --worktree`: 4 passed (competition_open, snapshot 17 file/667.424 B dalam cap, license_osi MIT, entrypoint main.ts node22), 1 failed yang diharapkan — `transcripts_present` (tidak ada bundle; bundle + submit di tangan parent), 15 skipped, 5 dicek saat submit (repo_public, repo_owner, repo_created_after_open, commit_in_repo, duplicate_snapshot — semuanya akan lolos: repo publik, owner.json sudah di remote, repo dibuat setelah pembukaan).
+- Playwright (Chromium headless, 1440×900, via `playwright-core` + browser cache lokal; skrip tes di /tmp/tr-pw/test.mjs — TIDAK di-commit): 17/17 lolos — integrity strip, kolom verdict (rank 1 Strong), search "veda" → 1 baris, filter RWA → 16, watchlist-only → 40, tab Live → 24, tab Model (formula + multiples + tabel validasi 4 baris + ambang farm), detail 4 protokol (Steakhouse Financial, USDD, Flying Tulip ftUSD, Gauntlet: farm plan identik dengan board.json, recompute sama, verdict cocok), tanpa page error. Satu-satunya 404 adalah `/favicon.ico` dari browser (entry tidak membawa favicon, seperti sebelumnya) — difilter di skrip tes.
+- Screenshot ulang 3 PNG (board, detail rank 1, filtered RWA): 166/177/165 KiB, 1440×900, diperiksa visual — strip rapi, kolom verdict terbaca, dialog detail menampilkan verdict + rasio.
+
+### Catatan untuk parent (bundle + submit)
+- File berubah: `lib/model.ts`, `lib/validate.ts` (baru), `main.ts`, `dashboard/app.js`, `dashboard/app.css`, `screenshots/*.png`, `validation.json`, `scripts/check-local.mjs`, `REPORT.md`. README tidak diubah (referral sudah ada).
+- Sesi ini (eeea5db7) + sesi builder awal (2508bcb3) adalah sesi terekam untuk bundle; API key TIDAK dirotasi di sesi ini (keputusan parent/Aarthi sebelum submit, sesuai catatan lama).
+- `out/` di repo lokal adalah hasil run lama (gitignored, tidak di-commit).

@@ -1,0 +1,205 @@
+{
+  "population": 128,
+  "splits": [
+    "hash-parity",
+    "tvl-median"
+  ],
+  "folds": [
+    {
+      "split": "hash-parity",
+      "fold": 0,
+      "train_n": 59,
+      "test_n": 69,
+      "full": {
+        "median_log_err": 1.4133,
+        "mape": 11.4862
+      },
+      "baseline": {
+        "median_log_err": 1.4329,
+        "mape": 6.8909
+      },
+      "no_growth": {
+        "median_log_err": 1.4089,
+        "mape": 11.968
+      },
+      "no_maturity": {
+        "median_log_err": 1.308,
+        "mape": 12.8006
+      },
+      "no_breadth": {
+        "median_log_err": 1.4133,
+        "mape": 11.4297
+      },
+      "no_category": {
+        "median_log_err": 1.5375,
+        "mape": 5.6012
+      }
+    },
+    {
+      "split": "hash-parity",
+      "fold": 1,
+      "train_n": 69,
+      "test_n": 59,
+      "full": {
+        "median_log_err": 1.7823,
+        "mape": 23.7345
+      },
+      "baseline": {
+        "median_log_err": 1.631,
+        "mape": 29.2553
+      },
+      "no_growth": {
+        "median_log_err": 1.7464,
+        "mape": 25.0683
+      },
+      "no_maturity": {
+        "median_log_err": 1.7906,
+        "mape": 31.3079
+      },
+      "no_breadth": {
+        "median_log_err": 1.7681,
+        "mape": 23.5457
+      },
+      "no_category": {
+        "median_log_err": 1.6368,
+        "mape": 21.2789
+      }
+    },
+    {
+      "split": "tvl-median",
+      "fold": 0,
+      "train_n": 64,
+      "test_n": 64,
+      "full": {
+        "median_log_err": 1.6521,
+        "mape": 1.6911
+      },
+      "baseline": {
+        "median_log_err": 2.0633,
+        "mape": 1.8131
+      },
+      "no_growth": {
+        "median_log_err": 1.6468,
+        "mape": 1.7488
+      },
+      "no_maturity": {
+        "median_log_err": 1.6016,
+        "mape": 1.9311
+      },
+      "no_breadth": {
+        "median_log_err": 1.6672,
+        "mape": 1.6689
+      },
+      "no_category": {
+        "median_log_err": 2.127,
+        "mape": 1.5765
+      }
+    },
+    {
+      "split": "tvl-median",
+      "fold": 1,
+      "train_n": 64,
+      "test_n": 64,
+      "full": {
+        "median_log_err": 1.665,
+        "mape": 71.3676
+      },
+      "baseline": {
+        "median_log_err": 1.9334,
+        "mape": 71.261
+      },
+      "no_growth": {
+        "median_log_err": 1.6513,
+        "mape": 75.0763
+      },
+      "no_maturity": {
+        "median_log_err": 1.672,
+        "mape": 94.9746
+      },
+      "no_breadth": {
+        "median_log_err": 1.6601,
+        "mape": 70.9446
+      },
+      "no_category": {
+        "median_log_err": 1.9766,
+        "mape": 53.3702
+      }
+    }
+  ],
+  "means": {
+    "full": {
+      "median_log_err": 1.6282,
+      "mape": 27.0699
+    },
+    "baseline": {
+      "median_log_err": 1.7652,
+      "mape": 27.3051
+    },
+    "no_growth": {
+      "median_log_err": 1.6134,
+      "mape": 28.4654
+    },
+    "no_maturity": {
+      "median_log_err": 1.5931,
+      "mape": 35.2535
+    },
+    "no_breadth": {
+      "median_log_err": 1.6272,
+      "mape": 26.8972
+    },
+    "no_category": {
+      "median_log_err": 1.8195,
+      "mape": 20.4567
+    }
+  },
+  "terms_help_in_folds": {
+    "growth": 0,
+    "maturity": 2,
+    "breadth": 1,
+    "category": 3
+  },
+  "grid": {
+    "best_per_fold": [
+      {
+        "growth_weight": 0.75,
+        "maturity_floor": 0.5,
+        "breadth_per_chain": 0,
+        "multiple_floor": 0.1,
+        "multiple_cap": 1,
+        "train_median_log_err": 0.9837,
+        "test_median_log_err": 1.5309
+      },
+      {
+        "growth_weight": 0,
+        "maturity_floor": 0.6,
+        "breadth_per_chain": 0,
+        "multiple_floor": 0.05,
+        "multiple_cap": 1.2,
+        "train_median_log_err": 1.1803,
+        "test_median_log_err": 1.7464
+      },
+      {
+        "growth_weight": 0,
+        "maturity_floor": 0.7,
+        "breadth_per_chain": 0.015,
+        "multiple_floor": 0.05,
+        "multiple_cap": 1.2,
+        "train_median_log_err": 0.8389,
+        "test_median_log_err": 1.6005
+      },
+      {
+        "growth_weight": 1,
+        "maturity_floor": 0.5,
+        "breadth_per_chain": 0,
+        "multiple_floor": 0.05,
+        "multiple_cap": 1.2,
+        "train_median_log_err": 1.1204,
+        "test_median_log_err": 1.8093
+      }
+    ],
+    "current_test_mean": 1.6282,
+    "best_test_mean": 1.688,
+    "adopted": null,
+    "keep_reason": "kept: no fitted tuple won in 3 of 4 folds (best won in 1); the current constants stand"
+  }
+}

@@ -32,6 +32,8 @@
     return Math.max(0, Math.round(days)) + 'd';
   }
   function fmtMult(n) { return 'x' + n.toFixed(2); }
+  function fmtRatio(n) { return n.toLocaleString('en-US') + 'x'; }
+  function verdictClass(v) { return v === 'Strong' ? 'strong' : v === 'Worth a look' ? 'worth' : 'thin'; }
 
   // The model in one function: TVL x category multiple (the snapshot's own live-token median)
   // x growth x maturity x chain breadth. Mirrors lib/model.ts impliedValue.
@@ -184,6 +186,22 @@
     );
   }
 
+  // The integrity strip: what the snapshot is, who was left out and why, and how the model
+  // held up out of sample. Every number comes from DATA.validation, computed by lib/validate.ts.
+  function integrityStrip() {
+    var v = DATA.validation;
+    if (!v) return null;
+    var ex = v.excluded;
+    var exTotal = ex.by_category + ex.versioned + ex.wrapped + ex.exchange;
+    var terms = 'dropping a term raises the held-out error in ' + v.terms_help.category + '/4 folds (category), ' +
+      v.terms_help.maturity + '/4 (maturity), ' + v.terms_help.breadth + '/4 (breadth), ' + v.terms_help.growth + '/4 (growth)';
+    return el('section', { class: 'strip', 'aria-label': 'How this board was checked' },
+      el('div', null, el('b', { text: 'Snapshot ' + v.as_of + ' · DefiLlama protocol index · ' + v.protocols_total + ' protocols' })),
+      el('div', null, el('span', { text: v.live_used + ' live-token protocols priced the board; ' + exTotal + ' pre-token protocols excluded (' + ex.by_category + ' by category, ' + ex.versioned + ' versioned, ' + ex.wrapped + ' wrapped/staked, ' + ex.exchange + ' exchange)' })),
+      el('div', null, el('span', { text: 'Held-out, 2 splits x 2 folds: full model median |log err| ' + v.full_median_log_err.toFixed(2) + ' vs baseline ' + v.baseline_median_log_err.toFixed(2) + ' — ' + terms + '.' }))
+    );
+  }
+
   function lede() {
     var h1 = el('h1');
     h1.appendChild(document.createTextNode(DATA.watchlist_size + ' watchlist protocols, ranked by '));
@@ -281,6 +299,7 @@
           el('div', { class: 'bar', 'aria-hidden': 'true' }, el('i', { style: 'width:' + Math.max(3, Math.round((r.implied_value_usd / max) * 100)) + '%' })),
           el('span', { class: 'num', text: fmtUsd(r.implied_value_usd) })
         )),
+        el('td', null, el('span', { class: 'verdict v-' + verdictClass(r.farm_verdict.verdict), text: r.farm_verdict.verdict }), el('div', { class: 'sub', text: fmtUsd(r.farm_verdict.total_cost_usd) + ' to farm' })),
         el('td', { class: 'num', text: fmtMult(r.category_multiple) }),
         el('td', null, el('span', { class: 'status', text: 'no token' }))
       );
@@ -297,6 +316,7 @@
             sortHeader('growth', '7d'),
             sortHeader('age', 'Age'),
             sortHeader('implied', 'Implied value'),
+            el('th', { scope: 'col', text: 'Farm verdict' }),
             el('th', { scope: 'col', text: 'Cat. x' }),
             el('th', { scope: 'col', text: 'Token' })
           )),
@@ -330,6 +350,38 @@
     );
   }
 
+  // The held-out validation table: one row per fold, median |log(pred/actual)| for the full
+  // model, the TVL-only baseline and each ablation. Lower is better; 0 is exact.
+  function validationSection() {
+    var v = DATA.validation;
+    if (!v) return null;
+    var vtbody = el('tbody');
+    v.per_fold.forEach(function (f) {
+      vtbody.appendChild(el('tr', null,
+        el('td', { text: f.split === 'hash-parity' ? 'Slug-hash parity' : 'TVL median' }),
+        el('td', { class: 'num', text: String(f.fold + 1) }),
+        el('td', { class: 'num', text: String(f.train_n) + ' / ' + String(f.test_n) }),
+        el('td', { class: 'num', text: f.full.median_log_err.toFixed(2) }),
+        el('td', { class: 'num', text: f.baseline.median_log_err.toFixed(2) }),
+        el('td', { class: 'num', text: f.no_growth.median_log_err.toFixed(2) }),
+        el('td', { class: 'num', text: f.no_maturity.median_log_err.toFixed(2) }),
+        el('td', { class: 'num', text: f.no_breadth.median_log_err.toFixed(2) }),
+        el('td', { class: 'num', text: f.no_category.median_log_err.toFixed(2) })
+      ));
+    });
+    return [
+      el('h3', { text: 'Held-out validation — does the model predict anything?' }),
+      el('p', { class: 'sub', text: 'Tested on the snapshot\u2019s ' + v.live_used + ' live-token protocols, which the board never ranks. Each split fits the category multiples on one half and scores the other, then swaps, so every live protocol is held out twice. On average the full model scores ' + v.full_median_log_err.toFixed(2) + ' against the TVL-only baseline\u2019s ' + v.baseline_median_log_err.toFixed(2) + '. The fitted constants were ' + (v.constants_kept ? 'kept' : 'changed') + ': ' + v.keep_reason + '.' }),
+      el('div', { class: 'table-wrap' },
+        el('table', null,
+          el('thead', null, el('tr', null, el('th', { scope: 'col', text: 'Split' }), el('th', { scope: 'col', text: 'Fold' }), el('th', { scope: 'col', text: 'Train / test' }), el('th', { scope: 'col', text: 'Full' }), el('th', { scope: 'col', text: 'Baseline' }), el('th', { scope: 'col', text: 'No growth' }), el('th', { scope: 'col', text: 'No maturity' }), el('th', { scope: 'col', text: 'No breadth' }), el('th', { scope: 'col', text: 'No category' }))),
+          vtbody
+        )
+      ),
+      el('p', { class: 'note', html: '<b>Farm verdicts.</b> Total cost = capital ($50–$250 by TVL tier) + setup gas ($4, or $8 where the capital is $150 or more) + $2 per week of hold; checking or claiming costs nothing. Value per dollar = implied value / total cost. <b>Strong</b>: at least 1,000,000x and implied value of $10M or more. <b>Worth a look</b>: at least 100,000x. Otherwise <b>Thin</b>. A verdict is the model\u2019s own claim, not a promise that a token will launch.' })
+    ];
+  }
+
   function modelPanel() {
     var m = DATA.model;
     var mults = DATA.multiples;
@@ -347,7 +399,7 @@
       el('td', { class: 'num', text: fmtMult(mults.global) }),
       el('td', { class: 'num', text: '—' })
     ));
-    return el('section', { class: 'panel model' },
+    var children = [
       el('h2', { text: 'How implied value is computed' }),
       el('p', { class: 'sub', text: 'One function scores every row, from the snapshot\u2019s own figures. No protocol name is special-cased and no row is hand-picked. The category multiple is not a guess: it is the median market-cap-to-TVL ratio of the live-token protocols in that category, computed from this same snapshot.' }),
       el('div', { class: 'formula' },
@@ -359,11 +411,16 @@
           el('thead', null, el('tr', null, el('th', { scope: 'col', text: 'Category' }), el('th', { scope: 'col', text: 'Multiple' }), el('th', { scope: 'col', text: 'Live tokens counted' }))),
           tbody
         )
-      ),
+      )
+    ];
+    var val = validationSection();
+    if (val) val.forEach(function (node) { children.push(node); });
+    children.push(
       el('p', { class: 'note', html: '<b>What the numbers mean.</b> TVL and seven-day growth come from the snapshot. Age is the time since the protocol was first listed — the best record of how long it has run with no token; an unlisted age uses ' + m.unknown_age_days + ' days. Chain breadth rewards protocols live on several chains, capped so it never dominates. Multiples are clamped to [' + m.multiple_floor + ', ' + m.multiple_cap + '].' }),
       el('p', { class: 'note', html: '<b>What this board does not claim.</b> A protocol on it “records no token” in DefiLlama\u2019s record — that is not proof it has none. Implied value is what a token would be worth if the protocol\u2019s record stayed as it is; it does not predict whether or when a token is issued. Wrapped, staked, bridged and exchange products are excluded, because they are not launches of their own.' }),
       el('p', { class: 'note', html: '<b>How to use it.</b> Open a row for its breakdown and farm plan. The plan\u2019s action follows the protocol\u2019s category, its capital follows its TVL tier ($50–$250), its hold follows its age (30–60 days). Never pay anyone to claim an airdrop.' })
     );
+    return el('section', { class: 'panel model' }, children);
   }
 
   var dialog = el('dialog', { class: 'detail', id: 'detail', 'aria-labelledby': 'detail-title' });
@@ -423,8 +480,10 @@
       ),
       el('p', { class: 'sub', text: 'Model ' + DATA.model_version + ': the page recomputes this row as ' + fmtUsd(recomputed) + (recomputed === row.implied_value_usd ? ', the same number board.json carries.' : ', which differs from the board — the data would be stale.') + ' ' + compText + ' This is an estimate, not a price, and not a prediction that a token will launch.' })
     ));
+    var fv = row.farm_verdict;
     dialog.appendChild(el('section', { class: 'detail-section' },
       el('h3', { text: 'Farm plan' }),
+      el('p', { class: 'sub', text: 'Farm verdict: ' + fv.verdict + ' — ' + fmtUsd(fv.total_cost_usd) + ' all-in for one position, or ' + fmtRatio(fv.value_per_dollar) + ' of implied value per dollar spent.' }),
       el('ol', { class: 'steps' }, steps.map(function (s) {
         var at = s.indexOf(' Cost: ');
         var action = at >= 0 ? s.slice(0, at) : s;
@@ -443,6 +502,8 @@
     app.textContent = '';
     var shell = el('div', { class: 'shell' });
     shell.appendChild(header());
+    var strip = integrityStrip();
+    if (strip) shell.appendChild(strip);
     shell.appendChild(lede());
     shell.appendChild(controls());
     if (state.tab === 'board') shell.appendChild(boardTable());

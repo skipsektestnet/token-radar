@@ -122,6 +122,7 @@ export interface BoardRow {
     age_days: number | null;
   };
   farm_steps: string[];
+  farm_verdict: FarmVerdict;
 }
 
 /** The dashboard's compact view of one row, with the farm plan derived in the page. */
@@ -142,6 +143,7 @@ export interface RadarRow {
   maturity_multiplier: number;
   breadth_multiplier: number;
   is_watchlist: boolean;
+  farm_verdict: FarmVerdict;
 }
 
 /** A live-token protocol: it already trades, so the board shows the market's own value. */
@@ -163,6 +165,92 @@ export interface CategoryMultiples {
   global: number;
 }
 
+/** A farm verdict: what one farm position costs all-in, and what it is worth farming for. */
+export interface FarmVerdict {
+  total_cost_usd: number;
+  value_per_dollar: number;
+  verdict: 'Strong' | 'Worth a look' | 'Thin';
+}
+
+/** Why a pre-token protocol is left off the board, counted once under the first reason that excludes it. */
+export interface ExclusionCounts {
+  by_category: number;
+  versioned: number;
+  wrapped: number;
+  exchange: number;
+}
+
+/** One held-out metric: median |log(pred/actual)| and mean absolute percentage error. */
+export interface ValidationVariantMetrics {
+  median_log_err: number;
+  mape: number;
+}
+
+/** One held-out fold: one split, one direction, every variant scored on the held-out side. */
+export interface ValidationFold {
+  split: 'hash-parity' | 'tvl-median';
+  fold: 0 | 1;
+  train_n: number;
+  test_n: number;
+  full: ValidationVariantMetrics;
+  baseline: ValidationVariantMetrics;
+  no_growth: ValidationVariantMetrics;
+  no_maturity: ValidationVariantMetrics;
+  no_breadth: ValidationVariantMetrics;
+  no_category: ValidationVariantMetrics;
+}
+
+/** The five constants the grid fit may move. */
+export interface FittedConstants {
+  growth_weight: number;
+  maturity_floor: number;
+  breadth_per_chain: number;
+  multiple_floor: number;
+  multiple_cap: number;
+}
+
+/** The full held-out result: four folds, the ablations, and the grid fit's decision. */
+export interface ValidationResult {
+  population: number;
+  splits: string[];
+  folds: ValidationFold[];
+  means: {
+    full: ValidationVariantMetrics;
+    baseline: ValidationVariantMetrics;
+    no_growth: ValidationVariantMetrics;
+    no_maturity: ValidationVariantMetrics;
+    no_breadth: ValidationVariantMetrics;
+    no_category: ValidationVariantMetrics;
+  };
+  terms_help_in_folds: { growth: number; maturity: number; breadth: number; category: number };
+  grid: {
+    best_per_fold: Array<FittedConstants & { train_median_log_err: number; test_median_log_err: number }>;
+    current_test_mean: number;
+    best_test_mean: number;
+    adopted: FittedConstants | null;
+    keep_reason: string;
+  };
+}
+
+/** The compact validation summary the dashboard carries: the proof, not the raw numbers. */
+export interface ModelValidation {
+  splits: string[];
+  folds: number;
+  per_fold: ValidationFold[];
+  full_median_log_err: number;
+  baseline_median_log_err: number;
+  ablations: { no_growth: number; no_maturity: number; no_breadth: number; no_category: number };
+  terms_help: { growth: number; maturity: number; breadth: number; category: number };
+  fitted_constants: FittedConstants;
+  constants_kept: boolean;
+  keep_reason: string;
+  as_of: string;
+  source: string;
+  protocols_total: number;
+  live_used: number;
+  excluded: ExclusionCounts;
+}
+
 /** Everything the dashboard needs: the board, the live set, and the model it runs. */
 export interface RadarData {
   as_of: string;
@@ -176,6 +264,7 @@ export interface RadarData {
   live_size: number;
   total_implied_usd: number;
   multiples: CategoryMultiples;
+  validation?: ModelValidation;
   rows: RadarRow[];
   live: LiveRow[];
 }
@@ -358,6 +447,7 @@ export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): B
       age_days: s.age,
     },
     farm_steps: farmSteps(s.p, s.age).map(stepText),
+    farm_verdict: farmVerdict(s.p, s.age, s.implied),
   }));
 }
 
@@ -375,7 +465,7 @@ function chainOf(p: SnapshotProtocol): string {
 }
 
 /** How much capital one farm position needs, from the protocol's own TVL. */
-function capitalFor(p: SnapshotProtocol): number {
+export function capitalFor(p: SnapshotProtocol): number {
   if (p.tvl_usd >= 5_000_000_000) return 250;
   if (p.tvl_usd >= 1_000_000_000) return 150;
   if (p.tvl_usd >= 100_000_000) return 100;
@@ -383,7 +473,7 @@ function capitalFor(p: SnapshotProtocol): number {
 }
 
 /** How long to hold, from the protocol's age: younger protocols get a longer qualifying window. */
-function holdDaysFor(age: number | null): number {
+export function holdDaysFor(age: number | null): number {
   if (age === null) return 30;
   if (age < 180) return 60;
   if (age < 365) return 45;
@@ -461,6 +551,19 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
   ];
 }
 
+/** A protocol's farm verdict: the all-in cost of one farm position, from the farm plan's own numbers. */
+export function farmVerdict(p: SnapshotProtocol, age: number | null, implied: number): FarmVerdict {
+  const capital = capitalFor(p);
+  const hold = holdDaysFor(age);
+  // Setup gas follows step 2 of the farm plan ($8 where the capital is $150 or more, else $4),
+  // weekly gas follows step 3 ($2 a week), and checking or claiming costs nothing (step 5).
+  const totalCost = capital + (capital >= 150 ? 8 : 4) + 2 * Math.ceil(hold / 7);
+  const ratio = implied / totalCost;
+  const verdict: FarmVerdict['verdict'] =
+    ratio >= 1_000_000 && implied >= 10_000_000 ? 'Strong' : ratio >= 100_000 ? 'Worth a look' : 'Thin';
+  return { total_cost_usd: totalCost, value_per_dollar: Math.round(ratio), verdict };
+}
+
 /** The live-token protocols, by market cap, for the dashboard's Live token view. */
 export function liveRows(snapshot: Snapshot): LiveRow[] {
   return snapshot.protocols
@@ -498,11 +601,30 @@ export function radarRow(row: BoardRow): RadarRow {
     maturity_multiplier: row.model.maturity_multiplier,
     breadth_multiplier: row.model.breadth_multiplier,
     is_watchlist: row.is_watchlist,
+    farm_verdict: row.farm_verdict,
   };
 }
 
+/** How many pre-token protocols each exclusion reason keeps off the board, counted once under the first reason that excludes it. */
+export function exclusionCounts(snapshot: Snapshot): ExclusionCounts {
+  const counts: ExclusionCounts = { by_category: 0, versioned: 0, wrapped: 0, exchange: 0 };
+  for (const p of snapshot.protocols) {
+    if (!isPreToken(p) || isRankable(p)) continue;
+    if (p.category !== null && EXCLUDED_CATEGORIES.has(p.category)) counts.by_category++;
+    else if (VERSIONED.test(p.name)) counts.versioned++;
+    else if (WRAPPED_WORD.test(p.name)) counts.wrapped++;
+    else if (EXCHANGE_PREFIX.test(p.name)) counts.exchange++;
+  }
+  return counts;
+}
+
 /** Everything the dashboard renders, from the snapshot. */
-export function buildRadar(snapshot: Snapshot, model: ModelConstants = MODEL): { board: BoardRow[]; radar: RadarData } {
+export function buildRadar(
+  snapshot: Snapshot,
+  model: ModelConstants = MODEL,
+  validation?: ModelValidation,
+  version: string = MODEL_VERSION,
+): { board: BoardRow[]; radar: RadarData } {
   const board = buildBoard(snapshot, model);
   const live = liveRows(snapshot);
   const multiples = categoryMultiples(snapshot, model);
@@ -512,13 +634,14 @@ export function buildRadar(snapshot: Snapshot, model: ModelConstants = MODEL): {
     source: snapshot.source,
     floor_usd: snapshot.floor_usd,
     model,
-    model_version: MODEL_VERSION,
+    model_version: version,
     watchlist_size: snapshot.watchlist.length,
     board_size: board.length,
     early_size: early,
     live_size: live.length,
     total_implied_usd: board.reduce((sum, r) => sum + r.implied_value_usd, 0),
     multiples,
+    validation,
     rows: board.map(radarRow),
     live,
   };

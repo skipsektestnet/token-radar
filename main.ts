@@ -16,7 +16,8 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { boardIssue, buildRadar, dataScript, parseSnapshot } from './lib/model.ts';
+import { boardIssue, buildRadar, dataScript, exclusionCounts, MODEL, MODEL_VERSION, parseSnapshot } from './lib/model.ts';
+import { summarizeValidation, validateModel } from './lib/validate.ts';
 import { buildDossier } from './vendor/makefun-board.ts';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
@@ -43,7 +44,20 @@ if (!existsSync(inputFile)) {
 const out = arg('output', process.env.MAKEFUN_OUTPUT_DIR ?? '/output');
 
 const snapshot = parseSnapshot(readFileSync(inputFile, 'utf8'));
-const { board, radar } = buildRadar(snapshot);
+// Held-out validation first: the grid fit may move the constants (spec §D1).
+// It keeps them unless one fitted tuple wins in at least 3 of 4 folds and cuts
+// the mean test error by at least 5%; a move also bumps the model version.
+const validation = validateModel(snapshot, MODEL);
+let effectiveModel = MODEL;
+let version = MODEL_VERSION;
+let finalValidation = validation;
+if (validation.grid.adopted !== null) {
+  effectiveModel = { ...MODEL, ...validation.grid.adopted };
+  version = 'radar-3';
+  finalValidation = validateModel(snapshot, effectiveModel);
+}
+const summary = summarizeValidation(finalValidation, effectiveModel, snapshot, exclusionCounts(snapshot));
+const { board, radar } = buildRadar(snapshot, effectiveModel, summary, version);
 const issue = boardIssue(board, snapshot);
 if (issue !== null) {
   process.stderr.write(`token radar: the model wrote a board the gate refuses: ${issue}\n`);
@@ -87,6 +101,7 @@ writeFileSync(join(out, 'dossier.json'), buildDossier(out, { text_max_bytes: TEX
 
 process.stdout.write(
   `token radar: ${snapshot.protocols.length} protocols, ${snapshot.watchlist.length} on the watchlist, ${board.length} rows scored (${radar.early_size} early, ${radar.live_size} live set aside)\n` +
+    `token radar: held-out: full model median |log err| ${summary.full_median_log_err} vs baseline ${summary.baseline_median_log_err} (${summary.folds} folds); ${summary.keep_reason}\n` +
     `token radar: top 3: ${board.slice(0, 3).map((r) => `${r.name} ($${r.implied_value_usd.toLocaleString('en-US')})`).join(', ')}\n` +
     `token radar: wrote ${join(out, 'board.json')}, ${join(out, 'data.js')}, ${join(out, 'dashboard')} (${dashFiles.length} files), ${join(out, 'screenshots')} (${shots.length} images) and ${join(out, 'dossier.json')}\n`,
 );
