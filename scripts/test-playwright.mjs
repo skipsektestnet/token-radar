@@ -1,4 +1,4 @@
-// Token Radar — Playwright interaction tests + screenshot refresh (radar-4).
+// Token Radar — Playwright interaction tests + screenshot refresh (radar-5).
 // Serves an output dir over loopback, drives the dashboard in headless
 // Chromium, and checks the page against board.json. Also refreshes the
 // three committed screenshots (board, detail, filtered) from the current UI.
@@ -78,7 +78,7 @@ await page.waitForSelector('table tbody tr');
 
 // 1. Integrity strip: snapshot, live count, held-out numbers from the new model.
 const strip = (await page.textContent('.strip')) ?? '';
-check('integrity_strip', /Held-out, 2 splits x 2 folds/.test(strip) && /1\.63/.test(strip) && /128 live-token/.test(strip), strip.slice(0, 120));
+check('integrity_strip', /Held-out, 3 splits x 2 folds/.test(strip) && /1\.69/.test(strip) && /128 live-token/.test(strip), strip.slice(0, 120));
 
 // 2. Board renders all rows.
 check('board_rows', (await rows()) === 197, `${await rows()} rows`);
@@ -105,11 +105,12 @@ await page.uncheck('#wl');
 await page.waitForFunction(() => document.querySelectorAll('table tbody tr').length === 197);
 
 // 6. Peers column: every row shows a "live/total" count and the sort works.
-const peersCells = await page.$$eval('table tbody tr td:nth-child(9) span.num', (tds) => tds.map((t) => t.textContent.trim()));
+// (Peers is the 10th column since radar-5 added the Size x column after Cat. x.)
+const peersCells = await page.$$eval('table tbody tr td:nth-child(10) span.num', (tds) => tds.map((t) => t.textContent.trim()));
 check('peers_column', peersCells.length === 197 && peersCells.every((t) => /^\d+\/\d+$/.test(t)), `${peersCells.length} cells, e.g. ${peersCells[0]}`);
-await page.click('thead tr th:nth-child(9) button');
+await page.click('thead tr th:nth-child(10) button');
 await page.waitForFunction(() => document.querySelectorAll('table tbody tr').length === 197);
-const firstPeers = await page.$eval('table tbody tr td:nth-child(9) span.num', (t) => t.textContent.trim());
+const firstPeers = await page.$eval('table tbody tr td:nth-child(10) span.num', (t) => t.textContent.trim());
 const maxShare = Math.max(...board.map((r) => r.peers.live_peers / Math.max(r.peers.total_peers, 1)));
 const firstShare = firstPeers.split('/').reduce((a, b) => Number(a) / Number(b));
 check('peers_sort', Math.abs(firstShare - maxShare) < 1e-9, `top peers ${firstPeers}`);
@@ -127,17 +128,17 @@ await page.click('button:has-text("Live token")');
 await page.waitForFunction(() => document.querySelectorAll('table tbody tr').length === 24);
 check('live_tab', (await rows()) === 24, '24 rows');
 
-// 9. Model tab: formula, multiples, validation table, peers table.
+// 9. Model tab: formula, multiples, size curve, validation table, peers table, gas table, how-to-check.
 await page.click('button:has-text("Model")');
 await page.waitForSelector('.model .formula');
 const modelText = (await page.textContent('.model')) ?? '';
 check(
   'model_tab',
-  /implied = round\(/.test(modelText) && /Peers with tokens/.test(modelText) && /Held-out validation/.test(modelText) && /Farm verdicts/.test(modelText) && /Tested and rejected/.test(modelText),
-  'formula + peers + validation + rejection note present',
+  /implied = round\(/.test(modelText) && /Peers with tokens/.test(modelText) && /Held-out validation/.test(modelText) && /Farm verdicts/.test(modelText) && /Tested and rejected/.test(modelText) && /size curve/i.test(modelText) && /How to check this radar/.test(modelText) && /Gas by chain/.test(modelText),
+  'formula + peers + validation + rejection note + size curve + how-to-check + gas present',
 );
 const valRows = await page.$$eval('.model table', (tables) => tables.map((t) => t.querySelectorAll('tbody tr').length));
-check('validation_table', valRows.includes(4), `tables have rows ${valRows.join('/')}`);
+check('validation_table', valRows.includes(6), `tables have rows ${valRows.join('/')}`);
 
 // 10. Detail views: farm plan identical to board.json, recompute matches,
 //     verdict matches, peers shown — for four protocols.

@@ -16,7 +16,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { boardIssue, buildRadar, dataScript, exclusionCounts, MODEL, MODEL_VERSION, parseSnapshot } from './lib/model.ts';
+import { boardIssue, buildRadar, dataScript, exclusionCounts, fitSizeCurve, MODEL, MODEL_VERSION, parseSnapshot } from './lib/model.ts';
 import { summarizeValidation, validateModel } from './lib/validate.ts';
 import { buildDossier } from './vendor/makefun-board.ts';
 
@@ -46,8 +46,8 @@ const out = arg('output', process.env.MAKEFUN_OUTPUT_DIR ?? '/output');
 const snapshot = parseSnapshot(readFileSync(inputFile, 'utf8'));
 // Held-out validation first: the constants grid may move the model's
 // constants (spec §D1). It keeps them unless one fitted tuple wins in at
-// least 3 of 4 folds and cuts the mean test error by at least 5%; a move
-// keeps the radar-4 family and is reported in the validation summary.
+// least 4 of 6 folds and cuts the mean test error by at least 5%; a move
+// keeps the radar-5 family and is reported in the validation summary.
 const validation = validateModel(snapshot, MODEL);
 let effectiveModel = MODEL;
 let finalValidation = validation;
@@ -56,7 +56,10 @@ if (validation.grid.adopted !== null) {
   finalValidation = validateModel(snapshot, effectiveModel);
 }
 const summary = summarizeValidation(finalValidation, effectiveModel, snapshot, exclusionCounts(snapshot));
-const { board, radar } = buildRadar(snapshot, effectiveModel, summary, MODEL_VERSION);
+// The size curve is fitted once from the snapshot's live protocols and
+// shared by the board and the validation summary, so both use the same slope.
+const sizeCurve = fitSizeCurve(snapshot.protocols);
+const { board, radar } = buildRadar(snapshot, effectiveModel, summary, MODEL_VERSION, sizeCurve);
 const issue = boardIssue(board, snapshot);
 if (issue !== null) {
   process.stderr.write(`token radar: the model wrote a board the gate refuses: ${issue}\n`);
@@ -101,6 +104,7 @@ writeFileSync(join(out, 'dossier.json'), buildDossier(out, { text_max_bytes: TEX
 process.stdout.write(
   `token radar: ${snapshot.protocols.length} protocols, ${snapshot.watchlist.length} on the watchlist, ${board.length} rows scored (${radar.early_size} early, ${radar.live_size} live set aside)\n` +
     `token radar: held-out: full model median |log err| ${summary.full_median_log_err} vs baseline ${summary.baseline_median_log_err} (${summary.folds} folds); ${summary.keep_reason}\n` +
+    `token radar: size curve: slope ${sizeCurve.slope} (SE ${sizeCurve.se}), ref TVL $${sizeCurve.ref_tvl_usd.toLocaleString('en-US')}, fit on ${sizeCurve.fit_n} live protocols; strict refit cut ${summary.size_curve.strict_refit.mean_cut_pct}% in ${summary.size_curve.strict_refit.wins} folds\n` +
     `token radar: top 3: ${board.slice(0, 3).map((r) => `${r.name} ($${r.implied_value_usd.toLocaleString('en-US')})`).join(', ')}\n` +
     `token radar: wrote ${join(out, 'board.json')}, ${join(out, 'data.js')}, ${join(out, 'dashboard')} (${dashFiles.length} files), ${join(out, 'screenshots')} (${shots.length} images) and ${join(out, 'dossier.json')}\n`,
 );

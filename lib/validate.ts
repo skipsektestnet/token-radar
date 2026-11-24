@@ -1,21 +1,27 @@
-// Token Radar — held-out validation of the valuation model (radar-4, spec §D1).
+// Token Radar — held-out validation of the valuation model (radar-5, spec §D1).
 //
 // The model's claim is that a live token's market cap is predictable from
-// TVL x category multiple x growth x maturity x breadth. This script tests
-// that claim on the snapshot's own live-token protocols, which the board
-// never ranks: two deterministic splits (slug-hash parity; above/below the
-// median TVL), two folds each, so every live protocol is held out exactly
-// twice. The category multiple is always fitted on the training side only,
+// TVL x category multiple x size factor x growth x maturity x breadth. This
+// script tests that claim on the snapshot's own live-token protocols, which
+// the board never ranks: three deterministic splits (slug-hash parity;
+// above/below the median TVL; older/newer half by listing date), two folds
+// each, so every live protocol is held out three times. The category
+// multiple and the size curve are always fitted on the training side only,
 // so the test side is genuinely unseen.
 //
 // Variants per fold: the full model, a baseline (TVL x the training side's
-// global median, nothing else), and four ablations that each drop one term.
+// global median, nothing else), and five ablations that each drop one term.
 // A term earns its keep only if dropping it raises the held-out error in a
 // majority of folds. A small grid over the four fittable constants is
 // selected on each fold's training side and scored on its test side; the
-// constants move only if one tuple wins in at least 3 of 4 folds and cuts
+// constants move only if one tuple wins in at least 4 of 6 folds and cuts
 // the mean test error by at least 5% — otherwise the current constants
 // stand, and the fit is reported as the evidence for keeping them.
+//
+// The size curve gets its own test on top: each fold refits the slope on
+// its train side only (strict refit), and the full-sample slope is also
+// applied to every fold (fixed slope), so the report shows both the honest
+// out-of-sample number and the fitted-slope number side by side.
 //
 // Run standalone: `node lib/validate.ts --input <snapshot.json> [--out validation.json]`
 // main.ts imports validateModel and embeds the summary in RadarData.validation.
@@ -25,6 +31,7 @@ import { fileURLToPath } from 'node:url';
 import {
   MODEL,
   categoryMultiples,
+  fitSizeCurve,
   impliedValue,
   isPreToken,
   median,
@@ -35,6 +42,7 @@ import type {
   ModelConstants,
   ModelValidation,
   ExclusionCounts,
+  SizeCurve,
   Snapshot,
   SnapshotProtocol,
   ValidationFold,
@@ -65,28 +73,33 @@ export function livePopulation(snapshot: Snapshot): SnapshotProtocol[] {
 }
 
 interface FoldData {
-  split: 'hash-parity' | 'tvl-median';
+  split: 'hash-parity' | 'tvl-median' | 'time';
   fold: 0 | 1;
   train: SnapshotProtocol[];
   test: SnapshotProtocol[];
+  /** The size curve fitted on this fold's train side only (strict refit). */
+  curve: SizeCurve;
 }
 
-/** The two deterministic splits, each in both directions: four folds in all. */
+/** The three deterministic splits, each in both directions: six folds in all. */
 function makeFolds(live: SnapshotProtocol[]): FoldData[] {
   const medianTvl = median(live.map((p) => p.tvl_usd));
+  const dated = live.filter((p) => p.listed_at !== null);
+  const medianListed = median(dated.map((p) => Date.parse(`${p.listed_at}T00:00:00Z`)));
   const sides = {
     'hash-parity': (p: SnapshotProtocol): number => djb2(p.slug) % 2,
     'tvl-median': (p: SnapshotProtocol): number => (p.tvl_usd > medianTvl ? 0 : 1),
+    // Time split uses dated protocols only: fold 0 trains on the older half
+    // and tests on the newer half, fold 1 the reverse.
+    time: (p: SnapshotProtocol): number => (Date.parse(`${p.listed_at}T00:00:00Z`) <= medianListed ? 0 : 1),
   } as const;
   const folds: FoldData[] = [];
-  for (const split of ['hash-parity', 'tvl-median'] as const) {
+  for (const split of ['hash-parity', 'tvl-median', 'time'] as const) {
+    const pool = split === 'time' ? dated : live;
     for (const fold of [0, 1] as const) {
-      folds.push({
-        split,
-        fold,
-        train: live.filter((p) => sides[split](p) === fold),
-        test: live.filter((p) => sides[split](p) === 1 - fold),
-      });
+      const train = pool.filter((p) => sides[split](p) === fold);
+      const test = pool.filter((p) => sides[split](p) === 1 - fold);
+      folds.push({ split, fold, train, test, curve: fitSizeCurve(train) });
     }
   }
   return folds;
@@ -106,25 +119,27 @@ function predictAll(
   train: SnapshotProtocol[],
   snapshot: Snapshot,
   model: ModelConstants,
-): Record<'full' | 'baseline' | 'no_growth' | 'no_maturity' | 'no_breadth' | 'no_category', number[]> {
+  curve?: SizeCurve,
+): Record<'full' | 'baseline' | 'no_growth' | 'no_maturity' | 'no_breadth' | 'no_category' | 'no_size', number[]> {
   const trainSnap: Snapshot = { as_of: snapshot.as_of, source: snapshot.source, floor_usd: snapshot.floor_usd, protocols: train, watchlist: [] };
   const multiples = categoryMultiples(trainSnap, model);
   const noCategory = { by_category: {} as Record<string, number>, live_counts: multiples.live_counts, global: multiples.global };
-  const out: Record<string, number[]> = { full: [], baseline: [], no_growth: [], no_maturity: [], no_breadth: [], no_category: [] };
+  const out: Record<string, number[]> = { full: [], baseline: [], no_growth: [], no_maturity: [], no_breadth: [], no_category: [], no_size: [] };
   for (const p of side) {
-    out.full!.push(impliedValue(p, asOf, multiples, model).implied);
+    out.full!.push(impliedValue(p, asOf, multiples, model, curve).implied);
     out.baseline!.push(Math.max(1, Math.round(p.tvl_usd * multiples.global)));
-    out.no_growth!.push(impliedValue(p, asOf, multiples, { ...model, growth_weight: 0 }).implied);
-    out.no_maturity!.push(impliedValue(p, asOf, multiples, { ...model, maturity_floor: 1, maturity_range: 0 }).implied);
-    out.no_breadth!.push(impliedValue(p, asOf, multiples, { ...model, breadth_per_chain: 0 }).implied);
-    out.no_category!.push(impliedValue(p, asOf, noCategory, model).implied);
+    out.no_growth!.push(impliedValue(p, asOf, multiples, { ...model, growth_weight: 0 }, curve).implied);
+    out.no_maturity!.push(impliedValue(p, asOf, multiples, { ...model, maturity_floor: 1, maturity_range: 0 }, curve).implied);
+    out.no_breadth!.push(impliedValue(p, asOf, multiples, { ...model, breadth_per_chain: 0 }, curve).implied);
+    out.no_category!.push(impliedValue(p, asOf, noCategory, model, curve).implied);
+    out.no_size!.push(impliedValue(p, asOf, multiples, model, undefined).implied);
   }
-  return out as Record<'full' | 'baseline' | 'no_growth' | 'no_maturity' | 'no_breadth' | 'no_category', number[]>;
+  return out as Record<'full' | 'baseline' | 'no_growth' | 'no_maturity' | 'no_breadth' | 'no_category' | 'no_size', number[]>;
 }
 
 /** One fold scored under one model: every variant against the held-out side's real market caps. */
 function evaluateFold(fold: FoldData, snapshot: Snapshot, model: ModelConstants): ValidationFold {
-  const preds = predictAll(fold.test, snapshot.as_of, fold.train, snapshot, model);
+  const preds = predictAll(fold.test, snapshot.as_of, fold.train, snapshot, model, fold.curve);
   const actuals = fold.test.map((p) => p.mcap_usd!);
   return {
     split: fold.split,
@@ -137,13 +152,14 @@ function evaluateFold(fold: FoldData, snapshot: Snapshot, model: ModelConstants)
     no_maturity: scoreVariant(preds.no_maturity, actuals),
     no_breadth: scoreVariant(preds.no_breadth, actuals),
     no_category: scoreVariant(preds.no_category, actuals),
+    no_size: scoreVariant(preds.no_size, actuals),
   };
 }
 
 /** The median |log err| of one fitted tuple on one side, fitted on that fold's training side. */
 function tupleMedianLogErr(tuple: FittedConstants, fold: FoldData, snapshot: Snapshot, side: 'train' | 'test'): number {
   const model: ModelConstants = { ...MODEL, ...tuple };
-  const preds = predictAll(side === 'train' ? fold.train : fold.test, snapshot.as_of, fold.train, snapshot, model);
+  const preds = predictAll(side === 'train' ? fold.train : fold.test, snapshot.as_of, fold.train, snapshot, model, fold.curve);
   const actuals = (side === 'train' ? fold.train : fold.test).map((p) => p.mcap_usd!);
   return scoreVariant(preds.full, actuals).median_log_err;
 }
@@ -170,12 +186,12 @@ function* gridTuples(): Generator<FittedConstants> {
 const tupleKey = (t: FittedConstants): string =>
   [t.growth_weight, t.maturity_floor, t.breadth_per_chain, t.multiple_floor, t.multiple_cap].join('/');
 
-/** The full held-out result: four folds, ablations, and the grid fit's keep-or-adopt decision. */
+/** The full held-out result: six folds, ablations, and the grid fit's keep-or-adopt decision. */
 export function validateModel(snapshot: Snapshot, model: ModelConstants = MODEL): ValidationResult {
   const live = livePopulation(snapshot);
   const folds = makeFolds(live);
   const scored = folds.map((f) => evaluateFold(f, snapshot, model));
-  const variantKeys = ['full', 'baseline', 'no_growth', 'no_maturity', 'no_breadth', 'no_category'] as const;
+  const variantKeys = ['full', 'baseline', 'no_growth', 'no_maturity', 'no_breadth', 'no_category', 'no_size'] as const;
   const means = Object.fromEntries(
     variantKeys.map((k) => [
       k,
@@ -187,6 +203,34 @@ export function validateModel(snapshot: Snapshot, model: ModelConstants = MODEL)
     maturity: scored.filter((s) => s.full.median_log_err < s.no_maturity.median_log_err).length,
     breadth: scored.filter((s) => s.full.median_log_err < s.no_breadth.median_log_err).length,
     category: scored.filter((s) => s.full.median_log_err < s.no_category.median_log_err).length,
+    size: scored.filter((s) => s.full.median_log_err < s.no_size.median_log_err).length,
+  };
+
+  // Size curve: the strict refit (each fold's own train-side slope, from
+  // per_fold) against the fixed slope (the full-sample slope on every fold).
+  const cutPct = (full: number, noSize: number): number => (noSize > 0 ? Math.round(((noSize - full) / noSize) * 1000) / 10 : 0);
+  const strictMeanCut = r4(mean(scored.map((s) => cutPct(s.full.median_log_err, s.no_size.median_log_err))));
+  const strictWins = `${scored.filter((s) => s.full.median_log_err < s.no_size.median_log_err).length}/${scored.length}`;
+  const fullCurve = fitSizeCurve(snapshot.protocols);
+  const fixedPerFold = folds.map((f) => {
+    const preds = predictAll(f.test, snapshot.as_of, f.train, snapshot, model, fullCurve);
+    const actuals = f.test.map((p) => p.mcap_usd!);
+    return {
+      full: scoreVariant(preds.full, actuals).median_log_err,
+      no_size: scoreVariant(preds.no_size, actuals).median_log_err,
+    };
+  });
+  const fixedMeanCut = r4(mean(fixedPerFold.map((x) => cutPct(x.full, x.no_size))));
+  const fixedWins = `${fixedPerFold.filter((x) => x.full < x.no_size).length}/${fixedPerFold.length}`;
+  const sizeCurve = {
+    slope: fullCurve.slope,
+    slope_se: fullCurve.se,
+    ref_tvl_usd: fullCurve.ref_tvl_usd,
+    live_n: fullCurve.live_n,
+    fit_n: fullCurve.fit_n,
+    strict_refit: { mean_cut_pct: strictMeanCut, wins: strictWins },
+    fixed_slope: { mean_cut_pct: fixedMeanCut, wins: fixedWins },
+    note: 'The tvl-median split trains on half the TVL range, so its slope cannot be estimated there; the time split tests whether the slope transfers across time.',
   };
 
   // Grid fit: each fold's training-best tuple, then the modal tuple scored on every fold's test side.
@@ -213,19 +257,20 @@ export function validateModel(snapshot: Snapshot, model: ModelConstants = MODEL)
   const bestTestMean = r4(mean(folds.map((f) => tupleMedianLogErr(modal.tuple, f, snapshot, 'test'))));
   const currentTestMean = r4(mean(scored.map((s) => s.full.median_log_err)));
   const adopted =
-    modal.n >= 3 && bestTestMean < 0.95 * currentTestMean ? modal.tuple : null;
+    modal.n >= 4 && bestTestMean < 0.95 * currentTestMean ? modal.tuple : null;
   const keepReason =
     adopted !== null
-      ? `adopted: fitted tuple ${tupleKey(modal.tuple)} won in ${modal.n} of 4 folds and cut mean test median |log err| from ${currentTestMean} to ${bestTestMean}`
-      : modal.n < 3
-        ? `kept: no fitted tuple won in 3 of 4 folds (best won in ${modal.n}); the current constants stand`
-        : `kept: the fitted tuple won in ${modal.n} of 4 folds but cut mean test median |log err| only from ${currentTestMean} to ${bestTestMean} (under the 5% bar)`;
+      ? `adopted: fitted tuple ${tupleKey(modal.tuple)} won in ${modal.n} of 6 folds and cut mean test median |log err| from ${currentTestMean} to ${bestTestMean}`
+      : modal.n < 4
+        ? `kept: no fitted tuple won in 4 of 6 folds (best won in ${modal.n}); the current constants stand`
+        : `kept: the fitted tuple won in ${modal.n} of 6 folds but cut mean test median |log err| only from ${currentTestMean} to ${bestTestMean} (under the 5% bar)`;
   return {
     population: live.length,
-    splits: ['hash-parity', 'tvl-median'],
+    splits: ['hash-parity', 'tvl-median', 'time'],
     folds: scored,
     means,
     terms_help_in_folds,
+    size_curve: sizeCurve,
     grid: { best_per_fold: bestPerFold, current_test_mean: currentTestMean, best_test_mean: bestTestMean, adopted, keep_reason: keepReason },
   };
 }
@@ -254,8 +299,10 @@ export function summarizeValidation(
       no_maturity: result.means.no_maturity.median_log_err,
       no_breadth: result.means.no_breadth.median_log_err,
       no_category: result.means.no_category.median_log_err,
+      no_size: result.means.no_size.median_log_err,
     },
     terms_help: result.terms_help_in_folds,
+    size_curve: result.size_curve,
     fitted_constants: {
       growth_weight: modelUsed.growth_weight,
       maturity_floor: modelUsed.maturity_floor,
@@ -266,7 +313,7 @@ export function summarizeValidation(
     constants_kept: kept,
     keep_reason: kept
       ? result.grid.keep_reason
-      : 'adopted from the held-out grid fit: the fitted constants won in at least 3 of 4 folds and cut mean test error by at least 5%',
+      : 'adopted from the held-out grid fit: the fitted constants won in at least 4 of 6 folds and cut mean test error by at least 5%',
     as_of: snapshot.as_of,
     source: snapshot.source,
     protocols_total: snapshot.protocols.length,
@@ -291,13 +338,17 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   writeFileSync(arg('out', 'validation.json'), `${JSON.stringify(result, null, 2)}\n`);
   const m = result.means;
   process.stdout.write(
-    `held-out validation: ${result.population} live-token protocols, 2 splits x 2 folds\n` +
+    `held-out validation: ${result.population} live-token protocols, 3 splits x 2 folds\n` +
       `  full model      median |log err| ${m.full.median_log_err}  MAPE ${m.full.mape}\n` +
       `  baseline        median |log err| ${m.baseline.median_log_err}  MAPE ${m.baseline.mape}\n` +
-      `  no growth       median |log err| ${m.no_growth.median_log_err}  (term helps in ${result.terms_help_in_folds.growth}/4 folds)\n` +
-      `  no maturity     median |log err| ${m.no_maturity.median_log_err}  (term helps in ${result.terms_help_in_folds.maturity}/4 folds)\n` +
-      `  no breadth      median |log err| ${m.no_breadth.median_log_err}  (term helps in ${result.terms_help_in_folds.breadth}/4 folds)\n` +
-      `  no category     median |log err| ${m.no_category.median_log_err}  (term helps in ${result.terms_help_in_folds.category}/4 folds)\n` +
+      `  no growth       median |log err| ${m.no_growth.median_log_err}  (term helps in ${result.terms_help_in_folds.growth}/6 folds)\n` +
+      `  no maturity     median |log err| ${m.no_maturity.median_log_err}  (term helps in ${result.terms_help_in_folds.maturity}/6 folds)\n` +
+      `  no breadth      median |log err| ${m.no_breadth.median_log_err}  (term helps in ${result.terms_help_in_folds.breadth}/6 folds)\n` +
+      `  no category     median |log err| ${m.no_category.median_log_err}  (term helps in ${result.terms_help_in_folds.category}/6 folds)\n` +
+      `  no size         median |log err| ${m.no_size.median_log_err}  (term helps in ${result.terms_help_in_folds.size}/6 folds)\n` +
+      `  size curve      slope ${result.size_curve.slope} (SE ${result.size_curve.slope_se}), ref TVL $${result.size_curve.ref_tvl_usd.toLocaleString('en-US')}, fit on ${result.size_curve.fit_n} live protocols\n` +
+      `  size strict     mean cut ${result.size_curve.strict_refit.mean_cut_pct}% in ${result.size_curve.strict_refit.wins} folds\n` +
+      `  size fixed      mean cut ${result.size_curve.fixed_slope.mean_cut_pct}% in ${result.size_curve.fixed_slope.wins} folds\n` +
       `  grid fit: ${result.grid.keep_reason}\n`,
   );
 }

@@ -1,4 +1,4 @@
-// Token Radar — the valuation model (radar-4).
+// Token Radar — the valuation model (radar-5).
 //
 // One sealed snapshot in, one ranked board out. The board ranks every protocol
 // the snapshot records as pre-token that is not a wrapped, staked, bridged or
@@ -23,23 +23,38 @@
 //   growthMult = 1 + (growth / 100) x 0.5
 //   maturity   = 0.6 + min(age_days, 1095) / 1095 x 0.4   (age unknown: 365)
 //   breadth    = 1 + min(chains - 1, 6) x 0.015
-//   implied    = max(1, round(tvl_usd x catMult x growthMult x maturity x breadth))
+//   sizeFactor = (tvl_usd / median live TVL) ^ slope, slope fitted within
+//                categories from the snapshot's live protocols (see below)
+//   implied    = max(1, round(tvl_usd x catMult x sizeFactor x growthMult
+//                x maturity x breadth))
 //
-// Radar-4 keeps this multiplicative model on purpose. Radar-3 (v2) replaced
+// Radar-5 keeps the multiplicative model on purpose. Radar-3 (v2) replaced
 // it with a fitted ridge regression: held-out median |log err| improved
 // 1.63 -> 1.27, but the dev rank fell 5085 -> 6497. The regression's values
 // no longer follow the snapshot's figures in a way a reader can check by
 // hand (log points summed and exponentiated; the top rows ran 0.13x-0.20x
 // of TVL x category multiple, one row 8.3x), so the model was reverted and
-// the regression removed. A TVL-tier adjustment was tested the same way and
-// rejected too: it cut held-out error 1.63 -> 1.49, but the big-token sample
-// behind it is 17 protocols, mostly CEX/staking/restaking, while the board's
-// large protocols are risk curators and basis traders — the factor does not
-// transfer across categories (see REPORT.md, "Iterasi radar-4").
+// the regression removed. A crude two-band TVL tier was tested the same way
+// and rejected too: it cut held-out error 1.63 -> 1.49, but the big-token
+// sample behind it is 17 protocols, mostly CEX/staking/restaking, while the
+// board's large protocols are risk curators and basis traders — the factor
+// does not transfer across categories (see REPORT.md, "Iterasi radar-4").
+//
+// Radar-5 replaces that rejected tier with a fitted size curve. The slope
+// of log(mcap/TVL) on log(TVL) is fitted WITHIN categories (categories with
+// at least 5 live protocols, demeaned), so it is not a composition effect,
+// and it is validated on six held-out folds including a time split (older
+// half predicts newer half). The curve is shown on the dashboard as a table
+// of size factors by TVL band, so the reader can check any row's factor by
+// hand: sizeFactor = (tvl_usd / $32.6M live median) ^ -0.33. Large
+// protocols score lower because the market, in this snapshot, pays less per
+// TVL dollar for size — the fitted slope is -0.33 (SE 0.13) on 83 live
+// protocols. See REPORT.md, "Iterasi radar-5".
 //
 // The farm plan is derived the same way: the protocol's category picks the
 // action, its TVL tier picks the capital, its age picks the hold. Every step
-// states what it costs and how long it takes.
+// states what it costs and how long it takes. Gas costs follow the
+// protocol's first chain, from the table below (typical-fee estimates).
 
 /** The snapshot's protocol entry: exactly the ten fields the sealed input carries. */
 export interface SnapshotProtocol {
@@ -96,7 +111,7 @@ export const MODEL: ModelConstants = {
 };
 
 /** The model's version label: the dashboard names it. */
-export const MODEL_VERSION = 'radar-4';
+export const MODEL_VERSION = 'radar-5';
 
 /** How many live-token protocols the Live token view carries, by market cap. */
 export const LIVE_ROWS = 24;
@@ -127,6 +142,8 @@ export interface BoardRow {
   implied_value_usd: number;
   model: {
     category_multiple: number;
+    /** Radar-5: the size factor for this row's TVL, rounded to 4 dp. */
+    size_multiplier: number;
     growth_pct: number;
     growth_multiplier: number;
     maturity_multiplier: number;
@@ -135,6 +152,8 @@ export interface BoardRow {
   };
   /** Radar-4: the protocol's peers' record — how many protocols in its category already carry a token. */
   peers: PeersRecord;
+  /** Radar-5: the launch odds implied by the peers' record, smoothed toward the global share (display only — never enters the implied value). */
+  launch_odds: number;
   farm_steps: string[];
   farm_verdict: FarmVerdict;
 }
@@ -153,12 +172,16 @@ export interface RadarRow {
   age_days: number | null;
   implied_value_usd: number;
   category_multiple: number;
+  /** Radar-5: the size factor for this row's TVL, rounded to 4 dp. */
+  size_multiplier: number;
   growth_multiplier: number;
   maturity_multiplier: number;
   breadth_multiplier: number;
   is_watchlist: boolean;
   /** Radar-4: the protocol's peers' record — how many protocols in its category already carry a token. */
   peers: PeersRecord;
+  /** Radar-5: the launch odds implied by the peers' record, smoothed toward the global share (display only). */
+  launch_odds: number;
   farm_verdict: FarmVerdict;
 }
 
@@ -216,7 +239,7 @@ export interface ValidationVariantMetrics {
 
 /** One held-out fold: one split, one direction, every variant scored on the held-out side. */
 export interface ValidationFold {
-  split: 'hash-parity' | 'tvl-median';
+  split: 'hash-parity' | 'tvl-median' | 'time';
   fold: 0 | 1;
   train_n: number;
   test_n: number;
@@ -226,6 +249,8 @@ export interface ValidationFold {
   no_maturity: ValidationVariantMetrics;
   no_breadth: ValidationVariantMetrics;
   no_category: ValidationVariantMetrics;
+  /** Radar-5: the full model without the size factor. */
+  no_size: ValidationVariantMetrics;
 }
 
 /** The constants the held-out grid fit may move (see lib/validate.ts). */
@@ -237,7 +262,7 @@ export interface FittedConstants {
   multiple_cap: number;
 }
 
-/** The full held-out result: four folds, the ablations, and the grid fit's decision. */
+/** The full held-out result: six folds, the ablations, and the grid fit's decision. */
 export interface ValidationResult {
   population: number;
   splits: string[];
@@ -249,8 +274,20 @@ export interface ValidationResult {
     no_maturity: ValidationVariantMetrics;
     no_breadth: ValidationVariantMetrics;
     no_category: ValidationVariantMetrics;
+    no_size: ValidationVariantMetrics;
   };
-  terms_help_in_folds: { growth: number; maturity: number; breadth: number; category: number };
+  terms_help_in_folds: { growth: number; maturity: number; breadth: number; category: number; size: number };
+  /** Radar-5: the fitted size curve and how it held up on the folds. */
+  size_curve: {
+    slope: number;
+    slope_se: number;
+    ref_tvl_usd: number;
+    live_n: number;
+    fit_n: number;
+    strict_refit: { mean_cut_pct: number; wins: string };
+    fixed_slope: { mean_cut_pct: number; wins: string };
+    note: string;
+  };
   grid: {
     best_per_fold: Array<FittedConstants & { train_median_log_err: number; test_median_log_err: number }>;
     current_test_mean: number;
@@ -267,8 +304,21 @@ export interface ModelValidation {
   per_fold: ValidationFold[];
   full_median_log_err: number;
   baseline_median_log_err: number;
-  ablations: { no_growth: number; no_maturity: number; no_breadth: number; no_category: number };
-  terms_help: { growth: number; maturity: number; breadth: number; category: number };
+  ablations: { no_growth: number; no_maturity: number; no_breadth: number; no_category: number; no_size: number };
+  terms_help: { growth: number; maturity: number; breadth: number; category: number; size: number };
+  /** Radar-5: the fitted size curve and how it held up. */
+  size_curve: {
+    slope: number;
+    slope_se: number;
+    ref_tvl_usd: number;
+    live_n: number;
+    fit_n: number;
+    /** Strict refit: each fold refits the slope on its train side only. */
+    strict_refit: { mean_cut_pct: number; wins: string };
+    /** Fixed slope: the full-sample slope applied to every fold. */
+    fixed_slope: { mean_cut_pct: number; wins: string };
+    note: string;
+  };
   fitted_constants: FittedConstants;
   constants_kept: boolean;
   keep_reason: string;
@@ -295,6 +345,9 @@ export interface RadarData {
   validation?: ModelValidation;
   /** Radar-4: the peers' record, per category. */
   peers_by_category?: { by_category: Record<string, PeersRecord>; global: PeersRecord };
+  /** Radar-5: the fitted size curve and the per-chain gas table (typical-fee estimates). */
+  size_curve?: SizeCurve;
+  gas_usd?: Record<string, number>;
   rows: RadarRow[];
   live: LiveRow[];
 }
@@ -395,6 +448,134 @@ export function categoryMultiples(snapshot: Snapshot, model: ModelConstants = MO
   return { by_category: out, live_counts: counts, global: Math.round(global * 1e4) / 1e4 };
 }
 
+/**
+ * The fitted size curve (radar-5): the slope of log(mcap/TVL) on log(TVL),
+ * fitted WITHIN categories — each category's log TVL and log(mcap/TVL) are
+ * demeaned first, so the slope is not a composition effect of rich
+ * categories being small and thin categories being large. Only categories
+ * with at least 5 live protocols enter the fit. The reference TVL is the
+ * median TVL of all live protocols. Slope and SE are rounded to 4 dp, so
+ * the dashboard's recompute uses exactly the numbers the board used.
+ */
+export interface SizeCurve {
+  slope: number;
+  se: number;
+  ref_tvl_usd: number;
+  live_n: number;
+  fit_n: number;
+}
+
+export function fitSizeCurve(protocols: SnapshotProtocol[]): SizeCurve {
+  const live = protocols.filter((p) => p.mcap_usd !== null && p.mcap_usd > 0 && p.tvl_usd > 0);
+  const byCat = new Map<string, SnapshotProtocol[]>();
+  for (const p of live) {
+    const key = p.category ?? 'Other';
+    const arr = byCat.get(key) ?? [];
+    arr.push(p);
+    byCat.set(key, arr);
+  }
+  // Within-category demeaned OLS of log(mcap/tvl) on log(tvl).
+  let n = 0;
+  let sxx = 0;
+  let sxy = 0;
+  const cats: SnapshotProtocol[][] = [];
+  for (const arr of byCat.values()) {
+    if (arr.length < 5) continue;
+    cats.push(arr);
+    const xs = arr.map((p) => Math.log(p.tvl_usd));
+    const ys = arr.map((p) => Math.log(p.mcap_usd! / p.tvl_usd));
+    const mx = xs.reduce((a, b) => a + b, 0) / xs.length;
+    const my = ys.reduce((a, b) => a + b, 0) / ys.length;
+    for (let i = 0; i < xs.length; i++) {
+      const dx = xs[i]! - mx;
+      sxx += dx * dx;
+      sxy += dx * (ys[i]! - my);
+      n++;
+    }
+  }
+  const slope = sxx > 0 ? sxy / sxx : 0;
+  let sse = 0;
+  for (const arr of cats) {
+    const xs = arr.map((p) => Math.log(p.tvl_usd));
+    const ys = arr.map((p) => Math.log(p.mcap_usd! / p.tvl_usd));
+    const mx = xs.reduce((a, b) => a + b, 0) / xs.length;
+    const my = ys.reduce((a, b) => a + b, 0) / ys.length;
+    for (let i = 0; i < xs.length; i++) {
+      const r = ys[i]! - my - slope * (xs[i]! - mx);
+      sse += r * r;
+    }
+  }
+  const dof = Math.max(n - cats.length - 1, 1);
+  const se = sxx > 0 ? Math.sqrt(sse / dof / sxx) : 0;
+  const ref = median(live.map((p) => p.tvl_usd));
+  return {
+    slope: Math.round(slope * 1e4) / 1e4,
+    se: Math.round(se * 1e4) / 1e4,
+    ref_tvl_usd: ref,
+    live_n: live.length,
+    fit_n: n,
+  };
+}
+
+/** The size factor for a TVL, rounded to 4 dp — the board and the dashboard use this same value. */
+export function sizeMultiplier(tvlUsd: number, curve: SizeCurve): number {
+  return Math.round(Math.pow(tvlUsd / curve.ref_tvl_usd, curve.slope) * 1e4) / 1e4;
+}
+
+/**
+ * The launch odds a category's peers' record implies (radar-5, display
+ * only — never enters the implied value). The peers' raw count is the fact;
+ * the odds smooth it toward the global share with a prior of 5, so a
+ * category with one protocol does not read as 0% or 100%.
+ */
+export function launchOdds(peers: PeersRecord, global: PeersRecord): number {
+  const share = global.total_peers > 0 ? global.live_peers / global.total_peers : 0;
+  return Math.round(((peers.live_peers + 5 * share) / (peers.total_peers + 5)) * 1e4) / 1e4;
+}
+
+/**
+ * Typical gas cost of one transaction per chain, in USD (radar-5, estimates
+ * from the usual fee levels of each chain — not snapshot data, and labelled
+ * as estimates wherever shown). Chains not listed default to $1.00.
+ */
+export const GAS_USD: Record<string, number> = {
+  Ethereum: 5,
+  Bitcoin: 2,
+  Solana: 0.05,
+  Base: 0.25,
+  Arbitrum: 0.25,
+  Optimism: 0.25,
+  Polygon: 0.1,
+  Binance: 0.25,
+  Avalanche: 0.5,
+  Tron: 0.5,
+  Sui: 0.05,
+  'Hyperliquid L1': 0.1,
+  Linea: 0.2,
+  Plasma: 0.2,
+  Sonic: 0.1,
+  Mantle: 0.2,
+  Scroll: 0.2,
+  Berachain: 0.25,
+  Fantom: 0.1,
+  xDai: 0.05,
+  Celo: 0.05,
+  Monad: 0.1,
+  'Robinhood Chain': 0.1,
+  Ripple: 0.05,
+  Arc: 0.1,
+};
+
+/** The gas cost of one transaction on a protocol's first chain. */
+export function gasFor(p: { chains: string[] }): number {
+  return GAS_USD[p.chains[0]!] ?? 1;
+}
+
+/** "$5" for a whole-dollar fee, "$0.05" otherwise — the dashboard formats gas the same way. */
+export function fmtGas(g: number): string {
+  return `$${Number.isInteger(g) ? String(g) : g.toFixed(2)}`;
+}
+
 /** The multiple one category gets: its own median, or the global median when it has too few live tokens. */
 export function multipleFor(category: string | null, multiples: CategoryMultiples): number {
   if (category !== null && Object.prototype.hasOwnProperty.call(multiples.by_category, category)) {
@@ -406,6 +587,8 @@ export function multipleFor(category: string | null, multiples: CategoryMultiple
 export interface ImpliedBreakdown {
   implied: number;
   categoryMultiple: number;
+  /** Radar-5: the size factor for this protocol's TVL (1 when no curve is given). */
+  sizeMult: number;
   growthPct: number;
   growthMult: number;
   maturityMult: number;
@@ -421,9 +604,11 @@ export function impliedValue(
   asOf: string,
   multiples: CategoryMultiples,
   model: ModelConstants = MODEL,
+  sizeCurve?: SizeCurve,
 ): ImpliedBreakdown {
   const age = ageDays(asOf, protocol.listed_at);
   const categoryMultiple = multipleFor(protocol.category, multiples);
+  const sizeMult = sizeCurve ? sizeMultiplier(protocol.tvl_usd, sizeCurve) : 1;
   const rawGrowth = finite(protocol.change_7d, 0);
   const growthPct = Math.min(model.growth_cap, Math.max(model.growth_floor, rawGrowth));
   const growthMult = 1 + (growthPct / 100) * model.growth_weight;
@@ -431,8 +616,8 @@ export function impliedValue(
   const maturityMult =
     model.maturity_floor + (Math.min(Math.max(ageForModel, 0), model.maturity_days) / model.maturity_days) * model.maturity_range;
   const breadthMult = 1 + Math.min(Math.max(protocol.chains.length - 1, 0), model.breadth_max_chains) * model.breadth_per_chain;
-  const implied = Math.max(1, Math.round(protocol.tvl_usd * categoryMultiple * growthMult * maturityMult * breadthMult));
-  return { implied, categoryMultiple, growthPct, growthMult, maturityMult, breadthMult, age };
+  const implied = Math.max(1, Math.round(protocol.tvl_usd * categoryMultiple * sizeMult * growthMult * maturityMult * breadthMult));
+  return { implied, categoryMultiple, sizeMult, growthPct, growthMult, maturityMult, breadthMult, age };
 }
 
 /**
@@ -464,9 +649,9 @@ export function peersRecord(snapshot: Snapshot): { by_category: Record<string, P
 
 /** The protocols the board ranks, strongest first, with ranks 1..n.
  * Every row is scored by the multiplicative model (TVL x category multiple
- * x growth x maturity x breadth) — the same arithmetic the dashboard
- * recomputes in the open, so a reader can check any row by hand. */
-export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): BoardRow[] {
+ * x size factor x growth x maturity x breadth) — the same arithmetic the
+ * dashboard recomputes in the open, so a reader can check any row by hand. */
+export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL, sizeCurve?: SizeCurve): BoardRow[] {
   const multiples = categoryMultiples(snapshot, model);
   const peers = peersRecord(snapshot);
   const watchlist = new Set(snapshot.watchlist);
@@ -482,7 +667,7 @@ export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): B
     if (!chosen.has(p.slug) && isRankable(p)) chosen.set(p.slug, p);
   }
   const scored = [...chosen.values()].map((p) => {
-    const v = impliedValue(p, snapshot.as_of, multiples, model);
+    const v = impliedValue(p, snapshot.as_of, multiples, model, sizeCurve);
     const peer = peers.by_category[p.category ?? 'Other'] ?? peers.global;
     return { p, v, implied: v.implied, peer };
   });
@@ -505,6 +690,7 @@ export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): B
     implied_value_usd: s.implied,
     model: {
       category_multiple: round4(s.v.categoryMultiple),
+      size_multiplier: round4(s.v.sizeMult),
       growth_pct: s.v.growthPct,
       growth_multiplier: round4(s.v.growthMult),
       maturity_multiplier: round4(s.v.maturityMult),
@@ -512,6 +698,7 @@ export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): B
       age_days: s.v.age,
     },
     peers: s.peer,
+    launch_odds: launchOdds(s.peer, peers.global),
     farm_steps: farmSteps(s.p, s.v.age).map(stepText),
     farm_verdict: farmVerdict(s.p, s.v.age, s.implied),
   }));
@@ -583,20 +770,24 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
   const chain = chainOf(p);
   const capital = capitalFor(p);
   const hold = holdDaysFor(age);
+  // Gas follows the protocol's first chain (typical-fee estimates): the
+  // setup gas in step 2 and the weekly gas in step 3 are the same number,
+  // and the verdict's all-in cost uses it too.
+  const g = gasFor(p);
   return [
     {
       text: `Use a fresh wallet that holds only the funds you plan to farm, and keep its seed phrase offline.`,
-      cost: 'under $3 of gas for the first transaction',
+      cost: `about ${fmtGas(g)} of gas for the first transaction`,
       time: '5 minutes',
     },
     {
       text: actionFor(p, capital, chain),
-      cost: `$${capital} of capital and about $${capital >= 150 ? 8 : 4} of gas`,
+      cost: `$${capital} of capital and about ${fmtGas(g)} of gas`,
       time: '15 minutes to set up',
     },
     {
       text: `Make one qualifying action each week, such as a deposit, a borrow, a swap or a vote.`,
-      cost: 'about $2 of gas a week',
+      cost: `about ${fmtGas(g)} of gas a week`,
       time: '10 minutes a week',
     },
     {
@@ -621,12 +812,20 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
 export function farmVerdict(p: SnapshotProtocol, age: number | null, implied: number): FarmVerdict {
   const capital = capitalFor(p);
   const hold = holdDaysFor(age);
-  // Setup gas follows step 2 of the farm plan ($8 where the capital is $150 or more, else $4),
-  // weekly gas follows step 3 ($2 a week), and checking or claiming costs nothing (step 5).
-  const totalCost = capital + (capital >= 150 ? 8 : 4) + 2 * Math.ceil(hold / 7);
+  // Setup gas follows step 2 of the farm plan and weekly gas follows step 3:
+  // both are the protocol's first chain's typical fee, and checking or
+  // claiming costs nothing (step 5).
+  const g = gasFor(p);
+  const totalCost = capital + g + g * Math.ceil(hold / 7);
   const ratio = implied / totalCost;
+  // Radar-5: Strong is 500,000x, not the radar-4 1,000,000x. The size term
+  // halved the model's value scale (total implied $3.75B -> $1.85B, top row
+  // $507M -> $115M), so the old threshold gives zero Strong rows. 500,000x
+  // is a round number that falls in the widest gap in the top of the ratio
+  // distribution (509,661x vs 321,521x below it), keeping Strong rare: 5 of
+  // 197 rows. See REPORT.md, "Iterasi radar-5".
   const verdict: FarmVerdict['verdict'] =
-    ratio >= 1_000_000 && implied >= 10_000_000 ? 'Strong' : ratio >= 100_000 ? 'Worth a look' : 'Thin';
+    ratio >= 500_000 && implied >= 10_000_000 ? 'Strong' : ratio >= 100_000 ? 'Worth a look' : 'Thin';
   return { total_cost_usd: totalCost, value_per_dollar: Math.round(ratio), verdict };
 }
 
@@ -663,11 +862,13 @@ export function radarRow(row: BoardRow): RadarRow {
     age_days: row.age_days,
     implied_value_usd: row.implied_value_usd,
     category_multiple: row.model.category_multiple,
+    size_multiplier: row.model.size_multiplier,
     growth_multiplier: row.model.growth_multiplier,
     maturity_multiplier: row.model.maturity_multiplier,
     breadth_multiplier: row.model.breadth_multiplier,
     is_watchlist: row.is_watchlist,
     peers: row.peers,
+    launch_odds: row.launch_odds,
     farm_verdict: row.farm_verdict,
   };
 }
@@ -691,9 +892,11 @@ export function buildRadar(
   model: ModelConstants = MODEL,
   validation?: ModelValidation,
   version: string = MODEL_VERSION,
+  sizeCurve?: SizeCurve,
 ): { board: BoardRow[]; radar: RadarData } {
   const peers = peersRecord(snapshot);
-  const board = buildBoard(snapshot, model);
+  const curve = sizeCurve ?? fitSizeCurve(snapshot.protocols);
+  const board = buildBoard(snapshot, model, curve);
   const live = liveRows(snapshot);
   const multiples = categoryMultiples(snapshot, model);
   const early = board.filter((r) => !r.is_watchlist).length;
@@ -711,6 +914,8 @@ export function buildRadar(
     multiples,
     validation,
     peers_by_category: peers,
+    size_curve: curve,
+    gas_usd: GAS_USD,
     rows: board.map(radarRow),
     live,
   };
