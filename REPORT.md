@@ -467,3 +467,44 @@ Validasi kini 3 split × 2 fold (hash-parity, TVL-median, **time split** — par
 - File berubah: `lib/model.ts`, `lib/validate.ts`, `main.ts`, `dashboard/app.js`, `screenshots/*.png`, `scripts/check-local.mjs`, `scripts/test-playwright.mjs`, `validation.json`, `experiment-size-curve.json` (baru), `README.md`, `REPORT.md`. `out/` dibiarkan stale (tidak dipakai); `out1/`/`out2/` output segar radar-5.
 - Sesi ini adalah sesi terekam untuk bundle (tambah ke builder 2508bcb3 + implementer eeea5db7 + v2 ae1e100d + radar-4 5fce0c67); pola bundle narrow --session seperti sebelumnya. JANGAN bundle `bundle-token-radar-v3.tar.gz` yang untracked di repo.
 - Kejujuran: radar-5 adalah varian pertama sejak radar-2 yang TERBUKTI lebih baik pada metrik held-out yang jujur (size menang 5/6 strict, 6/6 fixed; time-split mentransfer) DAN menjawab langsung kriteria juri 1–3 (nilai bisa dicek tangan dengan faktor ukuran yang terlihat, odds dari peers, farm plan dengan biaya gas per-chain) + panel judge-addressed. Tapi tidak ada jaminan rate juri naik: radar-3 membuktikan held-out yang lebih baik bisa dinilai juri lebih rendah, dan gap ke top 10 masih ~0,07. Yang bisa dijanjikan: ini versi terbaik yang terbukti sejauh ini, dan setiap klaimnya bisa dicek tangan juri.
+
+## Iterasi radar-6 (negatif) — 2026-11-25 (sesi ini, agen perbaikan; TIDAK submit, TIDAK ada commit)
+
+**Alasan:** rank 6373/19069 (turun dari 6357/19035), jauh di luar top 10. Sudut yang
+dicoba: bobot pertumbuhan kategori-spesifik (§3 Rencana lanjutan) + kandidat
+growth_weight=0 (D1 mencatat menghapus growth sedikit memperbaiki semua fold).
+
+**Eksperimen** (`lib/experiment-growth.ts`, baru; `experiment-growth-cat.json`
+angka mentah — keduanya UNTRACKED, belum di-commit karena tidak ada adopsi):
+128 protokol live-token, 6 fold yang sama seperti validasi radar-5 (hash-parity,
+TVL-median, time). Kelipatan kategori + kurva ukuran selalu di-fit dari sisi
+latih saja. Bobot per kategori di-fit di sisi latih saja dengan dua metode
+(grid atas median |log err|; slope OLS dari residu log atas g) + shrinkage ke
+0,5 global. Self-check: replikasi rumus `impliedValue` dengan w=0,5 sama persis
+dengan `impliedValue` pada 351/351 protokol uji. Per-fold model penuh cocok
+persis dengan `validation.json` (1,3325 / 1,3678 / 1,6497 / 2,0624 / 1,2973 /
+1,5183). Metrik: median |log(pred/actual)|, mean 6 fold.
+
+| Kandidat | Mean | Menang vs penuh | Potongan error |
+|---|---|---|---|
+| Penuh radar-5 (w=0,5 global) | 1,5380 | — | — |
+| gw0 (w=0 global) | 1,5359 | 4/6 | 0,33% |
+| grid5 (tanpa shrinkage) | 1,5323 | 3/6 | 0,46% |
+| **grid5-k5 (terbaik)** | **1,5235** | **4/6** | **1,09%** |
+| grid8-k5 | 1,5352 | 1/6 | 0,20% |
+| ols5-k5 | 1,5310 | 3/6 | 0,55% |
+| ols8-k10 | 1,5508 | 0/6 | −0,93% |
+
+**Keputusan: TIDAK ADA yang diadopsi.** Ambang §D (menang ≥4/6 DAN potong ≥5%)
+tidak terpenuhi kandidat mana pun — yang terbaik (grid5-k5) menang 4/6 tapi
+hanya memotong 1,09%. Model tetap radar-5; tidak ada perubahan kode, tidak ada
+commit/push, tidak ada resubmit dari sesi ini.
+
+**Bukti ini noise, bukan sinyal:** bobot ter-fit tidak stabil antar fold maupun
+antar metode — Lending w_fit berayun −1 ↔ +2 antar fold; CEX grid +1 vs OLS −1;
+Dexs +2 vs −1; RWA −1 (grid) vs −0,04 (OLS). Sampel per kategori hanya 5–15
+protokol live di sisi latih, terlalu kecil untuk mematok satu bobot per
+kategori. gw0 menang 4/6 tapi potongannya 0,33% — menghapus growth juga tidak
+lolos ambang, jadi w=0,5 dipertahankan (growth ada di kata-kata rubrik juri).
+Sudut ini SUDAH HABIS: jangan ulangi bobot pertumbuhan kategori-spesifik atau
+gw0 tanpa data baru (snapshot lebih besar / ground truth lain).

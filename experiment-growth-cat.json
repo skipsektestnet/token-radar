@@ -1,0 +1,887 @@
+{
+  "model": "radar-5",
+  "population": 128,
+  "folds": 6,
+  "self_check_protocols": 351,
+  "per_fold": [
+    {
+      "split": "hash-parity",
+      "fold": 0,
+      "train_n": 59,
+      "test_n": 69,
+      "full": 1.3325,
+      "gw0": 1.3112,
+      "grid5": 1.3868,
+      "grid5-k5": 1.3212,
+      "grid8-k5": 1.3325,
+      "ols5-k5": 1.3212,
+      "ols8-k10": 1.3325
+    },
+    {
+      "split": "hash-parity",
+      "fold": 1,
+      "train_n": 69,
+      "test_n": 59,
+      "full": 1.3678,
+      "gw0": 1.4241,
+      "grid5": 1.3314,
+      "grid5-k5": 1.3513,
+      "grid8-k5": 1.3513,
+      "ols5-k5": 1.3963,
+      "ols8-k10": 1.4445
+    },
+    {
+      "split": "tvl-median",
+      "fold": 0,
+      "train_n": 64,
+      "test_n": 64,
+      "full": 1.6497,
+      "gw0": 1.6348,
+      "grid5": 1.6424,
+      "grid5-k5": 1.6454,
+      "grid8-k5": 1.6497,
+      "ols5-k5": 1.6454,
+      "ols8-k10": 1.6497
+    },
+    {
+      "split": "tvl-median",
+      "fold": 1,
+      "train_n": 64,
+      "test_n": 64,
+      "full": 2.0624,
+      "gw0": 2.1103,
+      "grid5": 2.0726,
+      "grid5-k5": 2.0624,
+      "grid8-k5": 2.0624,
+      "ols5-k5": 2.0624,
+      "ols8-k10": 2.0624
+    },
+    {
+      "split": "time",
+      "fold": 0,
+      "train_n": 48,
+      "test_n": 47,
+      "full": 1.2973,
+      "gw0": 1.2405,
+      "grid5": 1.2422,
+      "grid5-k5": 1.2422,
+      "grid8-k5": 1.2973,
+      "ols5-k5": 1.2422,
+      "ols8-k10": 1.2973
+    },
+    {
+      "split": "time",
+      "fold": 1,
+      "train_n": 47,
+      "test_n": 48,
+      "full": 1.5183,
+      "gw0": 1.4945,
+      "grid5": 1.5183,
+      "grid5-k5": 1.5183,
+      "grid8-k5": 1.5183,
+      "ols5-k5": 1.5183,
+      "ols8-k10": 1.5183
+    }
+  ],
+  "summary": {
+    "full": {
+      "mean": 1.538,
+      "wins_vs_full": "-",
+      "mean_cut_pct": 0,
+      "adopted": false
+    },
+    "gw0": {
+      "mean": 1.5359,
+      "wins_vs_full": "4/6",
+      "mean_cut_pct": 0.3348,
+      "adopted": false
+    },
+    "grid5": {
+      "mean": 1.5323,
+      "wins_vs_full": "3/6",
+      "mean_cut_pct": 0.4636,
+      "adopted": false
+    },
+    "grid5-k5": {
+      "mean": 1.5235,
+      "wins_vs_full": "4/6",
+      "mean_cut_pct": 1.0937,
+      "adopted": false
+    },
+    "grid8-k5": {
+      "mean": 1.5352,
+      "wins_vs_full": "1/6",
+      "mean_cut_pct": 0.2011,
+      "adopted": false
+    },
+    "ols5-k5": {
+      "mean": 1.531,
+      "wins_vs_full": "3/6",
+      "mean_cut_pct": 0.5454,
+      "adopted": false
+    },
+    "ols8-k10": {
+      "mean": 1.5508,
+      "wins_vs_full": "0/6",
+      "mean_cut_pct": -0.9346,
+      "adopted": false
+    }
+  },
+  "fitted_per_fold": {
+    "grid5": [
+      {
+        "split": "hash-parity",
+        "fold": 0,
+        "fitted": {
+          "Dexs": {
+            "n": 5,
+            "w_fit": 2,
+            "w_used": 2
+          },
+          "Lending": {
+            "n": 6,
+            "w_fit": -1,
+            "w_used": -1
+          },
+          "CEX": {
+            "n": 6,
+            "w_fit": 2,
+            "w_used": 2
+          },
+          "RWA": {
+            "n": 8,
+            "w_fit": -1,
+            "w_used": -1
+          }
+        }
+      },
+      {
+        "split": "hash-parity",
+        "fold": 1,
+        "fitted": {
+          "Lending": {
+            "n": 9,
+            "w_fit": 2,
+            "w_used": 2
+          },
+          "Liquid Staking": {
+            "n": 5,
+            "w_fit": 2,
+            "w_used": 2
+          },
+          "Canonical Bridge": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -1
+          },
+          "Yield": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -1
+          },
+          "Bridge": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -1
+          },
+          "Dexs": {
+            "n": 6,
+            "w_fit": -1,
+            "w_used": -1
+          },
+          "Basis Trading": {
+            "n": 6,
+            "w_fit": -1,
+            "w_used": -1
+          }
+        }
+      },
+      {
+        "split": "tvl-median",
+        "fold": 0,
+        "fitted": {
+          "Lending": {
+            "n": 5,
+            "w_fit": 2,
+            "w_used": 2
+          },
+          "Canonical Bridge": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -1
+          },
+          "CEX": {
+            "n": 8,
+            "w_fit": 2,
+            "w_used": 2
+          },
+          "RWA": {
+            "n": 7,
+            "w_fit": -1,
+            "w_used": -1
+          }
+        }
+      },
+      {
+        "split": "tvl-median",
+        "fold": 1,
+        "fitted": {
+          "Liquid Staking": {
+            "n": 5,
+            "w_fit": 2,
+            "w_used": 2
+          },
+          "Yield": {
+            "n": 5,
+            "w_fit": 2,
+            "w_used": 2
+          },
+          "Lending": {
+            "n": 10,
+            "w_fit": 2,
+            "w_used": 2
+          },
+          "Dexs": {
+            "n": 8,
+            "w_fit": 2,
+            "w_used": 2
+          }
+        }
+      },
+      {
+        "split": "time",
+        "fold": 0,
+        "fitted": {
+          "Lending": {
+            "n": 6,
+            "w_fit": 1.5,
+            "w_used": 1.5
+          },
+          "CEX": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -1
+          },
+          "Liquid Staking": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -1
+          }
+        }
+      },
+      {
+        "split": "time",
+        "fold": 1,
+        "fitted": {
+          "Basis Trading": {
+            "n": 7,
+            "w_fit": -1,
+            "w_used": -1
+          },
+          "Lending": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -1
+          },
+          "RWA": {
+            "n": 7,
+            "w_fit": -1,
+            "w_used": -1
+          }
+        }
+      }
+    ],
+    "grid5-k5": [
+      {
+        "split": "hash-parity",
+        "fold": 0,
+        "fitted": {
+          "Dexs": {
+            "n": 5,
+            "w_fit": 2,
+            "w_used": 1.25
+          },
+          "Lending": {
+            "n": 6,
+            "w_fit": -1,
+            "w_used": -0.3182
+          },
+          "CEX": {
+            "n": 6,
+            "w_fit": 2,
+            "w_used": 1.3182
+          },
+          "RWA": {
+            "n": 8,
+            "w_fit": -1,
+            "w_used": -0.4231
+          }
+        }
+      },
+      {
+        "split": "hash-parity",
+        "fold": 1,
+        "fitted": {
+          "Lending": {
+            "n": 9,
+            "w_fit": 2,
+            "w_used": 1.4643
+          },
+          "Liquid Staking": {
+            "n": 5,
+            "w_fit": 2,
+            "w_used": 1.25
+          },
+          "Canonical Bridge": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -0.25
+          },
+          "Yield": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -0.25
+          },
+          "Bridge": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -0.25
+          },
+          "Dexs": {
+            "n": 6,
+            "w_fit": -1,
+            "w_used": -0.3182
+          },
+          "Basis Trading": {
+            "n": 6,
+            "w_fit": -1,
+            "w_used": -0.3182
+          }
+        }
+      },
+      {
+        "split": "tvl-median",
+        "fold": 0,
+        "fitted": {
+          "Lending": {
+            "n": 5,
+            "w_fit": 2,
+            "w_used": 1.25
+          },
+          "Canonical Bridge": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -0.25
+          },
+          "CEX": {
+            "n": 8,
+            "w_fit": 2,
+            "w_used": 1.4231
+          },
+          "RWA": {
+            "n": 7,
+            "w_fit": -1,
+            "w_used": -0.375
+          }
+        }
+      },
+      {
+        "split": "tvl-median",
+        "fold": 1,
+        "fitted": {
+          "Liquid Staking": {
+            "n": 5,
+            "w_fit": 2,
+            "w_used": 1.25
+          },
+          "Yield": {
+            "n": 5,
+            "w_fit": 2,
+            "w_used": 1.25
+          },
+          "Lending": {
+            "n": 10,
+            "w_fit": 2,
+            "w_used": 1.5
+          },
+          "Dexs": {
+            "n": 8,
+            "w_fit": 2,
+            "w_used": 1.4231
+          }
+        }
+      },
+      {
+        "split": "time",
+        "fold": 0,
+        "fitted": {
+          "Lending": {
+            "n": 6,
+            "w_fit": 1.5,
+            "w_used": 1.0455
+          },
+          "CEX": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -0.25
+          },
+          "Liquid Staking": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -0.25
+          }
+        }
+      },
+      {
+        "split": "time",
+        "fold": 1,
+        "fitted": {
+          "Basis Trading": {
+            "n": 7,
+            "w_fit": -1,
+            "w_used": -0.375
+          },
+          "Lending": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -0.25
+          },
+          "RWA": {
+            "n": 7,
+            "w_fit": -1,
+            "w_used": -0.375
+          }
+        }
+      }
+    ],
+    "grid8-k5": [
+      {
+        "split": "hash-parity",
+        "fold": 0,
+        "fitted": {
+          "RWA": {
+            "n": 8,
+            "w_fit": -1,
+            "w_used": -0.4231
+          }
+        }
+      },
+      {
+        "split": "hash-parity",
+        "fold": 1,
+        "fitted": {
+          "Lending": {
+            "n": 9,
+            "w_fit": 2,
+            "w_used": 1.4643
+          }
+        }
+      },
+      {
+        "split": "tvl-median",
+        "fold": 0,
+        "fitted": {
+          "CEX": {
+            "n": 8,
+            "w_fit": 2,
+            "w_used": 1.4231
+          }
+        }
+      },
+      {
+        "split": "tvl-median",
+        "fold": 1,
+        "fitted": {
+          "Lending": {
+            "n": 10,
+            "w_fit": 2,
+            "w_used": 1.5
+          },
+          "Dexs": {
+            "n": 8,
+            "w_fit": 2,
+            "w_used": 1.4231
+          }
+        }
+      },
+      {
+        "split": "time",
+        "fold": 0,
+        "fitted": {}
+      },
+      {
+        "split": "time",
+        "fold": 1,
+        "fitted": {}
+      }
+    ],
+    "ols5-k5": [
+      {
+        "split": "hash-parity",
+        "fold": 0,
+        "fitted": {
+          "Dexs": {
+            "n": 5,
+            "w_fit": 2,
+            "w_used": 1.25
+          },
+          "Lending": {
+            "n": 6,
+            "w_fit": -1,
+            "w_used": -0.3182
+          },
+          "CEX": {
+            "n": 6,
+            "w_fit": 1.123,
+            "w_used": 0.8398
+          },
+          "RWA": {
+            "n": 8,
+            "w_fit": -1,
+            "w_used": -0.4231
+          }
+        }
+      },
+      {
+        "split": "hash-parity",
+        "fold": 1,
+        "fitted": {
+          "Lending": {
+            "n": 9,
+            "w_fit": -1,
+            "w_used": -0.4643
+          },
+          "Liquid Staking": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -0.25
+          },
+          "Canonical Bridge": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -0.25
+          },
+          "Yield": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -0.25
+          },
+          "Bridge": {
+            "n": 5,
+            "w_fit": 2,
+            "w_used": 1.25
+          },
+          "Dexs": {
+            "n": 6,
+            "w_fit": -1,
+            "w_used": -0.3182
+          },
+          "Basis Trading": {
+            "n": 6,
+            "w_fit": -1,
+            "w_used": -0.3182
+          }
+        }
+      },
+      {
+        "split": "tvl-median",
+        "fold": 0,
+        "fitted": {
+          "Lending": {
+            "n": 5,
+            "w_fit": 2,
+            "w_used": 1.25
+          },
+          "Canonical Bridge": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -0.25
+          },
+          "CEX": {
+            "n": 8,
+            "w_fit": 0.6428,
+            "w_used": 0.5879
+          },
+          "RWA": {
+            "n": 7,
+            "w_fit": -1,
+            "w_used": -0.375
+          }
+        }
+      },
+      {
+        "split": "tvl-median",
+        "fold": 1,
+        "fitted": {
+          "Liquid Staking": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -0.25
+          },
+          "Yield": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -0.25
+          },
+          "Lending": {
+            "n": 10,
+            "w_fit": 2,
+            "w_used": 1.5
+          },
+          "Dexs": {
+            "n": 8,
+            "w_fit": 1.7567,
+            "w_used": 1.2733
+          }
+        }
+      },
+      {
+        "split": "time",
+        "fold": 0,
+        "fitted": {
+          "Lending": {
+            "n": 6,
+            "w_fit": 1.7796,
+            "w_used": 1.198
+          },
+          "CEX": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -0.25
+          },
+          "Liquid Staking": {
+            "n": 5,
+            "w_fit": -1,
+            "w_used": -0.25
+          }
+        }
+      },
+      {
+        "split": "time",
+        "fold": 1,
+        "fitted": {
+          "Basis Trading": {
+            "n": 7,
+            "w_fit": -1,
+            "w_used": -0.375
+          },
+          "Lending": {
+            "n": 5,
+            "w_fit": 2,
+            "w_used": 1.25
+          },
+          "RWA": {
+            "n": 7,
+            "w_fit": -1,
+            "w_used": -0.375
+          }
+        }
+      }
+    ],
+    "ols8-k10": [
+      {
+        "split": "hash-parity",
+        "fold": 0,
+        "fitted": {
+          "RWA": {
+            "n": 8,
+            "w_fit": -1,
+            "w_used": -0.1667
+          }
+        }
+      },
+      {
+        "split": "hash-parity",
+        "fold": 1,
+        "fitted": {
+          "Lending": {
+            "n": 9,
+            "w_fit": -1,
+            "w_used": -0.2105
+          }
+        }
+      },
+      {
+        "split": "tvl-median",
+        "fold": 0,
+        "fitted": {
+          "CEX": {
+            "n": 8,
+            "w_fit": 0.6428,
+            "w_used": 0.5635
+          }
+        }
+      },
+      {
+        "split": "tvl-median",
+        "fold": 1,
+        "fitted": {
+          "Lending": {
+            "n": 10,
+            "w_fit": 2,
+            "w_used": 1.25
+          },
+          "Dexs": {
+            "n": 8,
+            "w_fit": 1.7567,
+            "w_used": 1.0585
+          }
+        }
+      },
+      {
+        "split": "time",
+        "fold": 0,
+        "fitted": {}
+      },
+      {
+        "split": "time",
+        "fold": 1,
+        "fitted": {}
+      }
+    ]
+  },
+  "full_sample_weights": {
+    "grid5": {
+      "Lending": {
+        "n": 15,
+        "w_fit": 2,
+        "w_used": 2
+      },
+      "Liquid Staking": {
+        "n": 9,
+        "w_fit": 0.75,
+        "w_used": 0.75
+      },
+      "Dexs": {
+        "n": 11,
+        "w_fit": 2,
+        "w_used": 2
+      },
+      "Yield": {
+        "n": 9,
+        "w_fit": -1,
+        "w_used": -1
+      },
+      "Canonical Bridge": {
+        "n": 8,
+        "w_fit": 0.5,
+        "w_used": 0.5
+      },
+      "CEX": {
+        "n": 9,
+        "w_fit": 1,
+        "w_used": 1
+      },
+      "Basis Trading": {
+        "n": 7,
+        "w_fit": -1,
+        "w_used": -1
+      },
+      "RWA": {
+        "n": 9,
+        "w_fit": -1,
+        "w_used": -1
+      },
+      "Bridge": {
+        "n": 6,
+        "w_fit": 0.75,
+        "w_used": 0.75
+      }
+    },
+    "grid5_k5": {
+      "Lending": {
+        "n": 15,
+        "w_fit": 2,
+        "w_used": 1.625
+      },
+      "Liquid Staking": {
+        "n": 9,
+        "w_fit": 0.75,
+        "w_used": 0.6607
+      },
+      "Dexs": {
+        "n": 11,
+        "w_fit": 2,
+        "w_used": 1.5313
+      },
+      "Yield": {
+        "n": 9,
+        "w_fit": -1,
+        "w_used": -0.4643
+      },
+      "Canonical Bridge": {
+        "n": 8,
+        "w_fit": 0.5,
+        "w_used": 0.5
+      },
+      "CEX": {
+        "n": 9,
+        "w_fit": 1,
+        "w_used": 0.8214
+      },
+      "Basis Trading": {
+        "n": 7,
+        "w_fit": -1,
+        "w_used": -0.375
+      },
+      "RWA": {
+        "n": 9,
+        "w_fit": -1,
+        "w_used": -0.4643
+      },
+      "Bridge": {
+        "n": 6,
+        "w_fit": 0.75,
+        "w_used": 0.6364
+      }
+    },
+    "ols5_k5": {
+      "Lending": {
+        "n": 15,
+        "w_fit": 2,
+        "w_used": 1.625
+      },
+      "Liquid Staking": {
+        "n": 9,
+        "w_fit": 0.54,
+        "w_used": 0.5257
+      },
+      "Dexs": {
+        "n": 11,
+        "w_fit": 1.532,
+        "w_used": 1.2095
+      },
+      "Yield": {
+        "n": 9,
+        "w_fit": 0.996,
+        "w_used": 0.8189
+      },
+      "Canonical Bridge": {
+        "n": 8,
+        "w_fit": -1,
+        "w_used": -0.4231
+      },
+      "CEX": {
+        "n": 9,
+        "w_fit": -1,
+        "w_used": -0.4643
+      },
+      "Basis Trading": {
+        "n": 7,
+        "w_fit": -1,
+        "w_used": -0.375
+      },
+      "RWA": {
+        "n": 9,
+        "w_fit": -0.035,
+        "w_used": 0.1561
+      },
+      "Bridge": {
+        "n": 6,
+        "w_fit": 2,
+        "w_used": 1.3182
+      }
+    }
+  },
+  "adoption_rule": "adopt only if wins >= 4/6 folds vs full AND mean test median |log err| cut >= 5%"
+}
