@@ -55,10 +55,13 @@ coverage, bad ranks, bad farm steps).
 ## Layout
 
 - `main.ts` — entrypoint: snapshot in, board + dashboard + dossier out.
-- `lib/model.ts` — the valuation model (radar-3 ridge regression + launch
-  odds), the farm plans, the board builder.
+- `lib/model.ts` — the valuation model (radar-4: TVL × category multiple ×
+  growth × maturity × breadth, plus the peers' record), the farm plans, the
+  board builder. Radar-3's fitted ridge regression was reverted: it scored
+  better held-out (1.27 vs 1.63) but the dev rank fell, because its values no
+  longer follow the snapshot's figures in a way a reader can check by hand.
 - `lib/validate.ts` — the held-out validation (2 splits × 2 folds, ablations,
-  lambda grid) that the entry runs on every build.
+  constants grid) that the entry runs on every build.
 - `lib/experiment.ts` — the v2 model experiments that chose the regression
   family (shrinkage, OLS, ridge) on the same folds.
 - `dashboard/` — `index.html`, `app.css`, `app.js` (the page recomputes each

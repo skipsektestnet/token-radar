@@ -3,7 +3,7 @@
 // Exits 0 when every check passes, 1 with the failing check named.
 import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { boardIssue, farmVerdict, parseSnapshot } from '../lib/model.ts';
+import { boardIssue, categoryMultiples, farmVerdict, impliedValue, parseSnapshot } from '../lib/model.ts';
 import { buildDossier } from '../vendor/makefun-board.ts';
 
 const out = (process.argv.find((a) => a.startsWith('--out=')) ?? '--out=out').slice('--out='.length);
@@ -40,16 +40,17 @@ const verdictOk = board.every((r) => {
 });
 check('farm_verdicts', verdictOk, `${board.filter((r) => r.farm_verdict.verdict === 'Strong').length} Strong / ${board.filter((r) => r.farm_verdict.verdict === 'Worth a look').length} Worth a look / ${board.filter((r) => r.farm_verdict.verdict === 'Thin').length} Thin`);
 
-// Launch odds (v2): present on every row, a probability with peer counts behind it,
-// and the regression breakdown the page recomputes from.
-const oddsOk = board.every((r) => {
-  const o = r.launch_odds;
-  const g = r.regression;
-  return o && typeof o.odds === 'number' && o.odds >= 0 && o.odds <= 1
-    && Number.isSafeInteger(o.live_peers) && Number.isSafeInteger(o.total_peers) && o.live_peers <= o.total_peers
-    && g && typeof g.intercept === 'number' && typeof g.log_tvl === 'number' && typeof g.category_effect === 'number';
+// Peers' record (radar-4): present on every row as counts, and the row's
+// implied value recomputes from the snapshot figures with the effective model.
+const radarData = JSON.parse(read('data.js').replace(/^window\.RADAR=/, '').replace(/;\s*$/, ''));
+const multiples = categoryMultiples(snapshot, radarData.model);
+const peersOk = board.every((r) => {
+  const o = r.peers;
+  const v = impliedValue(r, snapshot.as_of, multiples, radarData.model);
+  return o && Number.isSafeInteger(o.live_peers) && Number.isSafeInteger(o.total_peers) && o.live_peers <= o.total_peers
+    && r.implied_value_usd === v.implied;
 });
-check('launch_odds', oddsOk, `odds 0-1 on all rows, peers counted, regression breakdown present`);
+check('peers', peersOk, `peers counted on all rows, implied value recomputes from TVL x multiple x growth x maturity x breadth`);
 
 const pngSize = (buf) => ({ w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) });
 const shots = readdirSync(join(out, 'screenshots')).filter((f) => f.endsWith('.png'));

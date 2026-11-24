@@ -356,3 +356,59 @@ Diuji pada 4 fold yang sama seperti §D (2 split × 2 fold, 128 protokol live-to
 - File berubah: `lib/model.ts`, `lib/validate.ts`, `lib/experiment.ts` (baru), `main.ts`, `dashboard/app.js`, `screenshots/*.png`, `scripts/check-local.mjs`, `scripts/test-playwright.mjs` (baru), `validation.json`, `experiment-v2.json` (baru), `README.md`, `REPORT.md`. `bundle.tar.gz` di entry dir adalah sisa bundle submit 01a20aee — TIDAK di-commit.
 - Sesi ini adalah sesi terekam untuk bundle (tambah ke builder 2508bcb3 + implementer eeea5db7); pola bundle narrow --session seperti sebelumnya.
 - Kejujuran: angka held-out membaik 22%, tetapi ranking juri (win rate vs house dashboard) tidak bisa diprediksi dari angka ini — perbaikan ini adalah model yang lebih baik + bukti yang lebih lengkap, bukan jaminan top 10.
+
+## Iterasi radar-4 — 2026-11-24 (sesi ini, agen perbaikan; TIDAK submit)
+
+**Alasan:** submission 01a20c68 (commit 884d0ec, radar-3) SCORED rank 6497/18672 (judge rate 0,8891, interval [0,8566, 0,9216]) — TURUN dari radar-2 (rank ~5085, rate ≈ 0,899). Angka held-out yang 22% lebih bagus membuat juri justru kurang senang. Agen radar-4 sebelumnya (14cd1708) timeout tanpa perubahan kode.
+
+### F1. Diagnosis — kenapa juri menilai v2 lebih rendah (semua angka terverifikasi)
+
+Juri (superbot, reasoning high) membaca dossier: 3 screenshot + teks source dashboard. Kriteria 2 rubriknya berbunyi: implied value "follows from the snapshot's own figures, the protocol's TVL, its seven-day growth and how long it has run with no token". Yang berubah v1 → v2 di mata juri:
+
+| Temuan | radar-2 (v1) | radar-3 (v2) |
+|---|---|---|
+| Rumus yang dibaca juri | TVL × kelipatan kategori × growth × maturitas × breadth — persis kalimat rubrik, bisa dicek tangan | log(mcap) = intercept + β·z(log TVL) + … — jumlah log-point lalu exp; tidak bisa dicek tangan |
+| Implied vs cek naif TVL × kelipatan (top-20) | 0,60×–0,99× (selalu dekat) | 0,13×–8,34× — Steakhouse 0,20×, Anemoy Capital 8,34× (TVL $27,9M → implied $64,0M, 2,29× TVL-nya) |
+| Implied/TVL board | min 0,087, median 0,160, max 0,61; 0 baris implied > TVL | min 0,002, median 0,250, max 2,29; 5 baris implied > TVL, 28 baris < 0,10× |
+| Stabilitas yang didokumentasikan dashboard | — | "koefisien OLS tidak stabil", "growth nilainya dalam noise" — entry sendiri meragukan modelnya |
+| Farm verdict Strong | 5 | 1 (board nyaris tanpa aksi utama) |
+| Teks dossier | 46.514 B | 51.577 B |
+
+Rate leaderboard (diambil live 24 Nov): rank 1 kiencx 0,9668 · rank 10 0,9621 · rank 50 0,9564 · rank 1000 0,9393 · rank 5000 0,9013 · rank 5085 0,8993 · **kita (v2) 0,8891** · rank 10000 0,8453. Jadi gap v1→v2 ≈ 0,010 rate (≈ 1.400 peringkat di zona padat ini), dan gap ke top 10 ≈ 0,073 — jauh. Ekspektasi jujur radar-4: memulihkan ~0,010 yang hilang (kembali ≈ rank 5000), BUKAN top 10.
+
+### F2. Eksperimen penyesuaian ukuran TVL (tier) — LOLOS uji held-out, DITOLAK karena tidak transfer
+
+Hipotesis: elastisitas TVL < 1 dari regresi (slope log(mcap/TVL) atas log TVL = −0,478) bisa ditangkap dengan tabel tier yang transparan: implied = radar-2 × faktor tier. Faktor = median rasio tier / median rasio global, di-fit dari sisi latih saja, 4 fold yang sama.
+
+| Varian | Mean median \|log err\| | Menang vs radar-2 | Keputusan |
+|---|---|---|---|
+| radar-2 | 1,6282 | — | referensi |
+| radar-3 (ridge λ=10) | 1,2694 | 4/4 | ditolak (F1) |
+| T2: tier < / ≥ $500M | 1,4923 | 3/4 | **lolos bar §D (−8,3%, 3/4) tapi DITOLAK** |
+| T2_half (faktor^0,5) | 1,5442 | 3/4 | ditolak |
+| T3 / T3_half | 1,5799 / 1,5399 | 2/4 / 3/4 | ditolak |
+| T4 / T4_half | 1,5575 / 1,5281 | 2/4 / 3/4 | ditolak |
+
+Alasan penolakan T2 (dicek komposisinya): faktor tier ≥ $500M = 0,151 didorong 17 protokol live besar yang isinya CEX (OKX 0,075, Gate 0,168, MEXC 0,034), Liquid/Staking Pool (Lido 0,013, SSV 0,003, Obol 0,001), Restaking (0,017–0,032) — median rasio mereka 0,032 vs protokol kecil 0,317. Sementara protokol kecil di kategori YANG SAMA dengan 17 besar itu median rasionya 0,445 (lebih kaya, bukan lebih tipis). Board justru punya protokol besar di kategori Risk Curator / Basis Trading (satu-satunya peer besar Basis Trading, Falcon Finance $1,56B TVL, rasio 0,204 — persis median global). Menerapkan faktor 0,151 ke Steakhouse adalah kesalahan kategori; T2 juga membuat BitFi Basis 0,835× TVL vs Falcon 0,204× dalam kategori yang sama. Held-out menang karena sisi uji live memang didominasi kategori rendah itu — tidak transfer ke populasi board. Dicatat di Model tab sebagai "Tested and rejected".
+
+### F3. Eksperimen estimator kelipatan kategori — median dipertahankan
+
+Median 1,6281 vs trimmed mean 1,7209 (1/4) vs geometric mean 1,7081 (1/4). Median tetap.
+
+### F4. Yang dibangun radar-4 (`MODEL_VERSION = 'radar-4'`)
+- **Model kembali ke radar-2 persis** (fungsi `impliedValue`/`categoryMultiples`/`farmVerdict` tidak berubah sejak v1 — diverifikasi diff): TVL × kelipatan kategori × growth × maturitas × breadth. Regresi (fit, breakdown log-point, ridge, `solveLinear`) DIHAPUS dari `lib/model.ts`; `lib/validate.ts` dikembalikan ke versi v1 (grid konstanta, bukan lambda); `main.ts` kembali ke blok validasi v1.
+- **Peers' record sebagai hitungan mentah, bukan odds:** kolom board "Peers w/ token" menampilkan "12 of 40" (live/total per kategori), tabel Model yang sama + share; probabilitas yang dihaluskan (18–77%) dihapus karena tidak ada ground truth untuk memvalidasinya. `peers` menggantikan `launch_odds` di `BoardRow`/`RadarRow`/`RadarData`.
+- **Model tab:** rumus multiplikatif (bisa dicek tangan) + tabel kelipatan + tabel peers + catatan "Tested and rejected" (regresi 1,27 vs 1,63 dihapus karena tak bisa dicek tangan; tier 1,63→1,49 ditolak karena tidak transfer antar kategori).
+- **Detail view:** breakdown multiplikatif langkah demi langkah (TVL × kelipatan → × growth → × maturitas → × breadth) + kalimat peers; recompute halaman == board.json.
+- Board kembali identik dengan v1: top 3 Steakhouse $506,8M / Sentora $466,7M / Gauntlet $301,8M, total $3,75Miliar, 5 Strong / 66 Worth a look / 126 Thin. Teks dossier 51.577 B → 49.606 B (dossier 757.730 B).
+
+### F5. Verifikasi ulang (semua lolos)
+- Dua run `main.ts` ke out1/out2 **byte-identik**; cek gate lokal `scripts/check-local.mjs` **11/11** (cek baru `peers`: hitungan ada di semua baris + implied recompute persis dari TVL × kelipatan × growth × maturitas × breadth dengan model efektif).
+- Kit CLI `makefun check --worktree`: 4 passed, 1 failed yang diharapkan (`transcripts_present` — bundle di tangan parent), 15 skipped, 5 at submission.
+- Playwright (`scripts/test-playwright.mjs`, playwright-core diinstal ulang ke `~/workspace/_tmp/pwtest/` karena /tmp terhapus): **17/17** — strip (1,63 vs baseline 1,77), 197 baris, search veda → 1, RWA → 16, watchlist-only → 40, kolom peers + sort (teratas 5/6), Strong rank 1, Live 24, tab Model (rumus + peers + validasi + catatan penolakan), detail 4 protokol (farm plan identik board.json, recompute sama, verdict + peers cocok), tanpa page error. Dua perbaikan saat tes: konstruksi `tbody` Model tab sempat terhapus saat edit (ReferenceError, diperbaiki), dan test peers membaca span angka (teks sel menggabung "5/39" + "peers launched").
+- Screenshot ulang 3 PNG (167/185/166 KiB), diperiksa visual — strip rapi, kolom peers terbaca, detail menampilkan breakdown multiplikatif; board kembali $506,8M di rank 1.
+
+### Catatan untuk parent (bundle + resubmit)
+- File berubah: `lib/model.ts`, `lib/validate.ts`, `main.ts`, `dashboard/app.js`, `screenshots/*.png`, `scripts/check-local.mjs`, `scripts/test-playwright.mjs`, `validation.json`, `README.md`, `REPORT.md`. `lib/experiment.ts` dibiarkan sebagai catatan eksperimen v2 (tidak dipakai main.ts).
+- Sesi ini adalah sesi terekam untuk bundle (tambah ke builder 2508bcb3 + implementer eeea5db7 + v2 ae1e100d); pola bundle narrow --session seperti sebelumnya.
+- Kejujuran: radar-4 memulihkan model yang berperingkat lebih baik + menambah peers' record yang bisa diverifikasi — targetnya kembali ke ≈0,899 (rank ~5000). Top 10 (0,962) butuh selisih 0,073 yang tidak bisa dijembatani oleh perubahan model ini; jangan janjikan itu.

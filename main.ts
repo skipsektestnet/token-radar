@@ -16,7 +16,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { boardIssue, buildRadar, dataScript, exclusionCounts, MODEL, MODEL_VERSION, REGRESSION_LAMBDA, parseSnapshot } from './lib/model.ts';
+import { boardIssue, buildRadar, dataScript, exclusionCounts, MODEL, MODEL_VERSION, parseSnapshot } from './lib/model.ts';
 import { summarizeValidation, validateModel } from './lib/validate.ts';
 import { buildDossier } from './vendor/makefun-board.ts';
 
@@ -44,19 +44,19 @@ if (!existsSync(inputFile)) {
 const out = arg('output', process.env.MAKEFUN_OUTPUT_DIR ?? '/output');
 
 const snapshot = parseSnapshot(readFileSync(inputFile, 'utf8'));
-// Held-out validation first: the lambda grid may move the ridge penalty
-// (spec §D1). It keeps lambda unless one value wins in at least 3 of 4
-// folds and cuts the mean test error by at least 5%; a move keeps the
-// radar-3 family and is reported in the validation summary.
-const validation = validateModel(snapshot, REGRESSION_LAMBDA);
-let lambda = REGRESSION_LAMBDA;
+// Held-out validation first: the constants grid may move the model's
+// constants (spec §D1). It keeps them unless one fitted tuple wins in at
+// least 3 of 4 folds and cuts the mean test error by at least 5%; a move
+// keeps the radar-4 family and is reported in the validation summary.
+const validation = validateModel(snapshot, MODEL);
+let effectiveModel = MODEL;
 let finalValidation = validation;
 if (validation.grid.adopted !== null) {
-  lambda = validation.grid.adopted.lambda;
-  finalValidation = validateModel(snapshot, lambda);
+  effectiveModel = { ...MODEL, ...validation.grid.adopted };
+  finalValidation = validateModel(snapshot, effectiveModel);
 }
-const summary = summarizeValidation(finalValidation, lambda, snapshot, exclusionCounts(snapshot));
-const { board, radar } = buildRadar(snapshot, MODEL, summary, MODEL_VERSION, lambda);
+const summary = summarizeValidation(finalValidation, effectiveModel, snapshot, exclusionCounts(snapshot));
+const { board, radar } = buildRadar(snapshot, effectiveModel, summary, MODEL_VERSION);
 const issue = boardIssue(board, snapshot);
 if (issue !== null) {
   process.stderr.write(`token radar: the model wrote a board the gate refuses: ${issue}\n`);

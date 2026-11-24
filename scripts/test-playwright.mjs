@@ -1,4 +1,4 @@
-// Token Radar — Playwright interaction tests + screenshot refresh (v2, radar-3).
+// Token Radar — Playwright interaction tests + screenshot refresh (radar-4).
 // Serves an output dir over loopback, drives the dashboard in headless
 // Chromium, and checks the page against board.json. Also refreshes the
 // three committed screenshots (board, detail, filtered) from the current UI.
@@ -78,7 +78,7 @@ await page.waitForSelector('table tbody tr');
 
 // 1. Integrity strip: snapshot, live count, held-out numbers from the new model.
 const strip = (await page.textContent('.strip')) ?? '';
-check('integrity_strip', /Held-out, 2 splits x 2 folds/.test(strip) && /1\.27/.test(strip) && /128 live-token/.test(strip), strip.slice(0, 120));
+check('integrity_strip', /Held-out, 2 splits x 2 folds/.test(strip) && /1\.63/.test(strip) && /128 live-token/.test(strip), strip.slice(0, 120));
 
 // 2. Board renders all rows.
 check('board_rows', (await rows()) === 197, `${await rows()} rows`);
@@ -104,13 +104,15 @@ check('watchlist_only', (await rows()) === 40, '40 rows');
 await page.uncheck('#wl');
 await page.waitForFunction(() => document.querySelectorAll('table tbody tr').length === 197);
 
-// 6. Odds column: every row shows a percentage and the sort works.
-const oddsCells = await page.$$eval('table tbody tr td:nth-child(9)', (tds) => tds.map((t) => t.textContent.trim()));
-check('odds_column', oddsCells.length === 197 && oddsCells.every((t) => /^\d+%/.test(t)), `${oddsCells.length} cells, e.g. ${oddsCells[0]}`);
+// 6. Peers column: every row shows a "live/total" count and the sort works.
+const peersCells = await page.$$eval('table tbody tr td:nth-child(9) span.num', (tds) => tds.map((t) => t.textContent.trim()));
+check('peers_column', peersCells.length === 197 && peersCells.every((t) => /^\d+\/\d+$/.test(t)), `${peersCells.length} cells, e.g. ${peersCells[0]}`);
 await page.click('thead tr th:nth-child(9) button');
 await page.waitForFunction(() => document.querySelectorAll('table tbody tr').length === 197);
-const firstOdds = await page.$eval('table tbody tr td:nth-child(9)', (t) => t.textContent.trim());
-check('odds_sort', firstOdds.startsWith('77%'), `top odds ${firstOdds}`);
+const firstPeers = await page.$eval('table tbody tr td:nth-child(9) span.num', (t) => t.textContent.trim());
+const maxShare = Math.max(...board.map((r) => r.peers.live_peers / Math.max(r.peers.total_peers, 1)));
+const firstShare = firstPeers.split('/').reduce((a, b) => Number(a) / Number(b));
+check('peers_sort', Math.abs(firstShare - maxShare) < 1e-9, `top peers ${firstPeers}`);
 // Back to the default sort (implied value, descending) for the screenshots.
 await page.click('thead tr th:nth-child(6) button');
 await page.waitForFunction(() => document.querySelectorAll('table tbody tr').length === 197);
@@ -125,20 +127,20 @@ await page.click('button:has-text("Live token")');
 await page.waitForFunction(() => document.querySelectorAll('table tbody tr').length === 24);
 check('live_tab', (await rows()) === 24, '24 rows');
 
-// 9. Model tab: formula, coefficients, multiples, validation table, odds table.
+// 9. Model tab: formula, multiples, validation table, peers table.
 await page.click('button:has-text("Model")');
 await page.waitForSelector('.model .formula');
 const modelText = (await page.textContent('.model')) ?? '';
 check(
   'model_tab',
-  /log\(implied\)/.test(modelText) && /Fitted coefficients/.test(modelText) && /Launch odds from the peers/.test(modelText) && /Held-out validation/.test(modelText) && /Farm verdicts/.test(modelText),
-  'formula + coefficients + odds + validation present',
+  /implied = round\(/.test(modelText) && /Peers with tokens/.test(modelText) && /Held-out validation/.test(modelText) && /Farm verdicts/.test(modelText) && /Tested and rejected/.test(modelText),
+  'formula + peers + validation + rejection note present',
 );
 const valRows = await page.$$eval('.model table', (tables) => tables.map((t) => t.querySelectorAll('tbody tr').length));
 check('validation_table', valRows.includes(4), `tables have rows ${valRows.join('/')}`);
 
 // 10. Detail views: farm plan identical to board.json, recompute matches,
-//     verdict matches, odds shown — for four protocols.
+//     verdict matches, peers shown — for four protocols.
 await page.click('button:has-text("Board")');
 await page.waitForFunction(() => document.querySelectorAll('table tbody tr').length === 197);
 const detailSlugs = ['steakhouse-financial', 'usdd', 'flying-tulip-ftusd', 'gauntlet'];
@@ -170,16 +172,16 @@ for (const slug of detailSlugs) {
   const stepsOk = steps.length === wantSteps.length && steps.every((s, i) => s === wantSteps[i]);
   const recomputeOk = dialogText.includes('the same number board.json carries');
   const verdictOk = dialogText.includes(`Farm verdict: ${want.farm_verdict.verdict}`);
-  const oddsOk = dialogText.includes('Launch odds (peers)') && dialogText.includes(`${want.launch_odds.live_peers} of ${want.launch_odds.total_peers}`);
-  if (!stepsOk || !recomputeOk || !verdictOk || !oddsOk) {
+  const peersOk = dialogText.includes('Peers with tokens') && dialogText.includes(`${want.peers.live_peers} of ${want.peers.total_peers}`);
+  if (!stepsOk || !recomputeOk || !verdictOk || !peersOk) {
     detailOk = false;
-    detailNote = `${slug}: steps=${stepsOk} recompute=${recomputeOk} verdict=${verdictOk} odds=${oddsOk}`;
+    detailNote = `${slug}: steps=${stepsOk} recompute=${recomputeOk} verdict=${verdictOk} peers=${peersOk}`;
     break;
   }
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.querySelector('dialog[open]'));
 }
-check('detail_views', detailOk, detailNote || '4 protocols: farm plan, recompute, verdict, odds all match');
+check('detail_views', detailOk, detailNote || '4 protocols: farm plan, recompute, verdict, peers all match');
 
 // 11. No page errors (favicon 404 excluded).
 check('no_page_errors', errors.length === 0, errors.slice(0, 3).join(' | ') || 'none');
