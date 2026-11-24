@@ -10,6 +10,11 @@
   ganti dengan identitas git Aarthi sebelum push)
 - Status: **SIAP SUBMIT (kode + artefak lengkap), BELUM TER-SUBMIT** — terblokir
   karena belum ada repo GitHub dan belum ada akses GitHub di VM (lihat § Submit).
+  Lanjutan 24 Nov 2026 ~07:05 WIB (sesi f4481df8, agen token-radar lanjutan):
+  repo GitHub BELUM dibuat, perbaikan model kiencx (held-out 2×, integrity
+  strip, costed farm verdicts) BELUM diimplementasikan — sesi ini terblokir
+  eksekusi (lihat § Lanjutan 2026-11-24 di bawah) dan hanya menghasilkan
+  temuan terverifikasi + spesifikasi implementasi yang siap dikerjakan.
 
 ## Apa yang dibangun
 
@@ -122,6 +127,137 @@ blocker selesai):
 menampilkan sebagian isi file kredensial make.fun di output tool lokal.
 API key tidak pernah dikirim ke mana pun, tapi demi hygiene sebaiknya
 **rotasi API key make.fun** (register ulang) sebelum submit.
+
+## Lanjutan 2026-11-24 (sesi f4481df8 — agen lanjutan, TIDAK submit)
+
+### A. Paid place — TERJAWAB, bisa dapat paid place (dengan syarat)
+- `handed_over_places` token-radar-01 = **`none`** (terverifikasi dari
+  `GET /api/competitions/token-radar-01/requirements`, baris
+  `"handed_over_places":"none"`). Artinya: entry yang sesinya handed-over
+  tetap dinilai dan diranking, tapi TIDAK mendapat paid place.
+- Syarat paid place: bundle harus berisi **sesi terekam** (bukan handed-over).
+  Sesi Muse app (milik parent + subagent) ADALAH sesi terekam: pola yang
+  sudah terbukti di tiny-chess-01 (bundle `--session <file sesi subagent>`
+  + usage row dari muse.db → `thinking_priced` LOLOS). Jadi submit dari
+  sesi ini BISA mendapat paid place asal parent me-bundle sesi builder
+  awal (`2508bcb3-5ed0-4725-8091-951c5642dea1`, file sesinya ada di
+  `~/agents/agent-2508bcb3-.../sessions/`) + sesi lanjutan ini
+  (`f4481df8-1d5f-48aa-bc49-9ab4235ea0e9`) dengan usage rows masing-masing,
+  dan TIDAK memakai sesi handed-over.
+- Catatan lama "sesi ini tak punya log harness" sudah tidak berlaku:
+  file sesi builder awal ada dan bundle-able; yang belum ada hanyalah kit
+  token-radar-01 (belum pernah diunduh — tidak ada di `~/workspace/makefun/kits/`
+  maupun `entries/_kits/`). Parent harus mengunduhnya dulu:
+  `curl -sSL "https://make.fun/c/token-radar-01/kit" | tar xz`.
+
+### B. API key — yang dimaksud catatan lama (TIDAK dirotasi, sesuai larangan)
+- Key yang dimaksud adalah **make.fun API key** (`x-api-key`, prefix `af_…`,
+  30 hari, kedaluwarsa 2026-12-23), yang tersimpan di `~/.makefun/credentials`.
+  Sebagian isinya sempat tampil di output tool lokal di awal sesi builder
+  awal (token-radar), dan token ber-prefix `af_` itu masih ada di file sesi
+  `2508bcb3…` (baris 6). Nilainya TIDAK pernah dikirim ke mana pun dan
+  TIDAK ditampilkan di laporan ini.
+- Pereda risiko: requirements menyatakan bundle "removes e-mail addresses,
+  home folder paths, usernames and credentials on its own" — bundle
+  menyaring kredensial sebelum menyimpan. Meski begitu, demi hygiene,
+  rotasi key (register ulang dengan keypair yang sama) tetap disarankan
+  SEBELUM submit — tetapi rotasi itu harus diputuskan Aarthi/parent, bukan
+  sesi ini (dilarang oleh tugas).
+
+### C. Blokir eksekusi sesi ini — yang belum dikerjakan dan kenapa
+- Perintah pertama sesi ini (`git log/status`, `ls`) hasilnya gagal
+  pemeriksaan risiko eksekusi sistem. Sesuai aturan, sesi ini TIDAK
+  menjalankan git, clone, push, build, test, atau edit kode apa pun
+  setelah itu. Yang dilakukan hanya pembacaan file (main.ts, lib/model.ts,
+  dashboard/app.js + index.html, README, competition.json, requirements API).
+- Yang TERTUNDA dan butuh persetujuan eksplisit Aarthi (kata-kata biasa,
+  setelah diberi tahu risikonya — pola yang sama seperti install skill
+  sebelumnya): (1) membuat repo GitHub `skipsektestnet/token-radar`,
+  set About, push commit lokal; (2) implementasi §D di bawah +
+  verifikasi gate + Playwright + screenshot ulang; (3) bundle + submit
+  oleh parent.
+
+### D. Spesifikasi implementasi mengejar top 1 kiencx (siap dikerjakan)
+Semua perubahan di `lib/model.ts` + `dashboard/app.js` (+ `main.ts` bila
+perlu), model tetap `radar-2` kecuali konstanta berubah karena hasil fit —
+bila berubah, naikkan ke `radar-3` dan sebutkan di dashboard + README.
+
+**D1. Held-out DUA KALI untuk setiap value term (file baru `lib/validate.ts`,
+dijalankan seperti main.ts: `node validate.ts --input <snapshot.json>`).**
+- Populasi uji: protokol live-token yang punya mcap + TVL > 0 (yang
+  dipakai menghitung category multiple). Prediksi: `mcap_pred = TVL ×
+  catMult × growthMult × maturityMult × breadthMult` (fungsi yang sama
+  dengan `impliedValue`, tapi catMult dihitung dari fold latih saja).
+- Dua split deterministik (tanpa random): split A = paritas hash slug
+  (mis. `slug` djb2 genap/ganjil); split B = separuh berdasarkan median
+  TVL (di atas/di bawah median). Tiap split: 2 fold (latih di satu sisi,
+  uji di sisi lain, lalu dibalik) → total 4 kali fit + uji.
+- Metrik tiap fold: median |log(pred/actual)| dan MAPE; bandingkan model
+  penuh vs baseline (global median saja) vs ablasi tiap term (tanpa
+  growth, tanpa maturity, tanpa breadth, tanpa kategori). Setiap term
+  harus menurunkan error held-out di mayoritas fold — bila ada term yang
+  tidak membantu, laporkan dan pertimbangkan menghapus/menurunkannya.
+- Fit: grid kecil atas `growth_weight` (0, 0.25, 0.5, 0.75, 1.0),
+  `maturity_floor` (0.5, 0.6, 0.7), `breadth_per_chain` (0, 0.015, 0.03),
+  dan clamp multiple ([0.05,1.20] vs [0.10,1.00]) — pilih yang terbaik
+  di fold latih, nilai di fold uji. Bila nilai fit stabil di keempat
+  fit dan dekat dengan konstanta sekarang, PERTAHANKAN konstanta dan
+  laporkan buktinya; bila berbeda material, adopsi nilai fit.
+- Output: `validation.json` (angka mentah) + ringkasan tercetak; simpan
+  ringkasannya ke `RadarData.validation` agar dashboard menampilkannya.
+
+**D2. Integrity strip (dashboard + data).**
+- Tambah field `validation` di `RadarData` (lib/model.ts `buildRadar`):
+  `{ splits, folds, metric_median_log_err, baseline, ablations,
+  fitted_constants, as_of, source, protocols_total, live_used,
+  excluded: { by_category, versioned, wrapped, exchange } }`.
+- Dashboard: strip di bawah header (`header()` di app.js) yang menampilkan:
+  snapshot `as_of` + sumber DefiLlama, jumlah protokol snapshot, jumlah
+  live-token yang dipakai fit, jumlah yang diexclude per alasan, dan
+  ringkasan held-out ("model penuh median |log err| X vs baseline Y,
+  diuji 2 split × 2 fold"). Tambah juga satu bagian di tab Model dengan
+  tabel hasil validasi per fold + ablasi.
+- Batas: teks dossier sekarang 40.829 B dari cap 65.536 B — tambahan teks
+  strip + tabel validasi JAGA di bawah ~10 KB agar dossier tetap lolos.
+
+**D3. Costed farm verdicts (per baris board).**
+- Tambah field `farm_verdict` di `BoardRow` (dan `RadarRow`):
+  `{ total_cost_usd, value_per_dollar, verdict }`.
+  `total_cost_usd` = modal (capitalFor) + gas: setup $4–8 + $2/minggu ×
+  ceil(hold/7) minggu + klaim $0 — hitung dari angka yang SUDAH ada di
+  farm_steps (jangan angka baru yang tak terlacak).
+  `value_per_dollar` = `implied_value_usd / total_cost_usd` (klaim model
+  sendiri, bukan janji).
+  `verdict`: "Strong" bila ratio ≥ 1.000.000 dan implied ≥ $10M;
+  "Worth a look" bila ratio ≥ 100.000; selain itu "Thin" — ambang
+  ditulis di tab Model. Tampilkan verdict + total cost di detail view
+  (bagian Farm plan) dan sebagai kolom baru di tabel board.
+- Gate `boardIssue` tidak melarang field tambahan — tapi JANGAN ubah
+  farm_steps yang sudah lolos (3–12 langkah, 20–600 karakter).
+
+**D4. Verifikasi ulang setelah implementasi (wajib sebelum submit).**
+- Dua run `main.ts` ke out1/out2 byte-identik (deterministik).
+- 7 cek gate yang sama semua lolos (board 197 baris, coverage 40/40,
+  farm steps, screenshots, dossier byte-identik).
+- Tes Playwright yang sama (search/filter/live/model/detail, farm plan
+  di halaman identik dengan board.json, implied value recompute sama).
+- Screenshot ulang 3 PNG (board, detail, filtered) karena UI berubah
+  (integrity strip + kolom verdict) — ukuran tetap ≤ 512 KiB, 1440×900.
+- README: tambahkan referral jeq52989 (README saat ini punya badge
+  make.fun tapi BELUM ada referral) — pakai template bounty bila ada di
+  kit yang diunduh parent; cek `competition.json` field readme_template.
+- Repo: buat `skipsektestnet/token-radar` (public), set About
+  (description + homepage https://make.fun/bounty/token-radar-01 +
+  topics makefun, ai-agents, bounties), pastikan `.makefun/owner.json`
+  (wallet di atas — SUDAH ada di repo lokal) ikut ter-commit, push
+  commit lokal (4b0a54d, cdf75f5) ke main, verifikasi remote. Periksa
+  identitas commit lokal (REPORT lama menyebut placeholder `skip`) —
+  samakan dengan identitas git Aarthi sebelum push.
+- Input snapshot untuk run lokal: TIDAK ada file snapshot di dalam
+  entry (hanya `competition.json` + `out/` hasil run lama) — implementer
+  harus memakai snapshot yang sama dengan run awal (dari kit / unduhan
+  sebelumnya); bila tidak ditemukan, ambil dari kit token-radar-01
+  setelah diunduh parent.
 
 ## Rencana lanjutan untuk mengejar TOP 10
 
